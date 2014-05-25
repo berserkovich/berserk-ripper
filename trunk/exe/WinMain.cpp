@@ -1,12 +1,11 @@
+#include "Ripper.h"
 
-#define WIN32_LEAN_AND_MEAN
-#define WINVER 0x0500
-#define _WIN32_WINNT 0x0500
-#define UNICODE
-#define _UNICODE
-#include <Windows.h>
+#include <memory>
+#include <new>
 
 int CALLBACK wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 {
-    return 0;
+    RipperApp app(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
+    app.Initialize();
+    return app.Run();
 }
