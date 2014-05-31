@@ -28,16 +28,34 @@ LRESULT WINAPI RipperWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 RipperApp::RipperApp(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow)
 : m_hInstance(hInstance)
 , m_nCmdShow(nCmdShow)
+, m_sharedMutex(nullptr, &::CloseHandle)
 , m_wndPtr(nullptr, &::DestroyWindow)
 {
 }
 
 RipperApp::~RipperApp()
 {
+    if (m_sharedMutex)
+    {
+        ReleaseMutex(m_sharedMutex.get());
+    }
 }
 
 bool RipperApp::Initialize()
 {
+    m_sharedMutex.reset(CreateMutex(NULL, TRUE, SHARED_MUTEX_NAME));
+    if (!m_sharedMutex)
+    {
+        log(L"Failed to create mutex");
+        return false;
+    }
+
+    if (GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        log(L"Mutex is locked");
+        return false;
+    }
+
     m_sharedMemPtr = CreateSharedMemory(FILE_MAPPING_OBJECT_NAME, sizeof(D3D9DeviceOffsets));
     if (!m_sharedMemPtr)
     {
@@ -88,7 +106,6 @@ int RipperApp::Run()
         DispatchMessage(&msg);
     }
 
-    ClearProcesses();
     return 0;
 }
 
@@ -114,22 +131,6 @@ LRESULT RipperApp::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 
 void RipperApp::CheckProcesses()
 {
-    if (!m_injectedProcesses.empty())
-    {
-        auto newEndIt = std::remove_if(m_injectedProcesses.begin(), m_injectedProcesses.end(), [](const InjectedProcess& process) -> bool
-        {
-            DWORD exitCode = 0;
-            if (::GetExitCodeProcess(process.hProcess, &exitCode) && exitCode == STILL_ACTIVE)
-            {
-                return false;
-            }
-            return true;
-        });
-
-        m_injectedProcesses.erase(newEndIt, m_injectedProcesses.end());
-    }
-    
-
     std::unique_ptr<std::remove_pointer<HANDLE>::type, decltype(&::CloseHandle)> pSnapshot(
         CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0), &::CloseHandle);
     if (!pSnapshot)
@@ -152,19 +153,6 @@ void RipperApp::CheckProcesses()
         if (::GetCurrentProcessId() == processInfo.th32ProcessID)
         {
             continue;
-        }
-
-        if (!m_injectedProcesses.empty())
-        {
-            auto itFind = std::find_if(m_injectedProcesses.begin(), m_injectedProcesses.end(), [=](const InjectedProcess& process) -> bool
-            {
-                return process.pid == processInfo.th32ProcessID;
-            });
-
-            if (itFind != m_injectedProcesses.end())
-            {
-                continue;
-            }
         }
 
         if (CheckModules(processInfo.th32ProcessID))
@@ -198,30 +186,27 @@ bool RipperApp::CheckModules(DWORD pid)
         return false;
     }
 
+    bool injectTarget = false;
+
     do
     {
+        if (_wcsicmp(moduleInfo.szModule, L"ripper.dll") == 0)
+        {
+            return false;
+        }
+
         if (_wcsicmp(moduleInfo.szModule, L"d3d9.dll") == 0)
         {
-            return true;
+            injectTarget = true;
         }
 
     } while (Module32Next(pSnapshot.get(), &moduleInfo));
 
-    return false;
+    return injectTarget;
 }
 
 bool RipperApp::InjectProcess(DWORD pid)
 {
-    auto itFind = std::find_if(m_injectedProcesses.cbegin(), m_injectedProcesses.cend(), [=](const InjectedProcess& process) -> bool
-    {
-        return process.pid == pid;
-    });
-
-    if (itFind != m_injectedProcesses.end())
-    {
-        return true;
-    }
-
     DWORD desiredAccess = PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ;
     unique_handle_ptr processPtr(OpenProcess(desiredAccess, FALSE, pid), &::CloseHandle);
     if (!processPtr)
@@ -264,38 +249,5 @@ bool RipperApp::InjectProcess(DWORD pid)
     }
     VirtualFreeEx(processPtr.get(), remoteModulePathBuffer, 0, MEM_RELEASE);
 
-    InjectedProcess injectedProcess =
-    {
-        pid,
-        processPtr.release(),
-        exitCode
-    };
-    m_injectedProcesses.push_back(injectedProcess);
     return true;
-}
-
-void RipperApp::ClearProcesses()
-{
-    for (auto it = m_injectedProcesses.begin(), it_end = m_injectedProcesses.end(); it != it_end; ++it)
-    {
-        InjectedProcess& injectedProcess = (*it);
-        DWORD threadId = 0;
-        unique_handle_ptr threadPtr(CreateRemoteThread(injectedProcess.hProcess, NULL, 0,
-                                    reinterpret_cast<LPTHREAD_START_ROUTINE>(&::FreeLibrary),
-                                    reinterpret_cast<LPVOID>(injectedProcess.hInjectedModule), 0, &threadId),
-                                    &::CloseHandle);
-        if (!threadPtr)
-        {
-            log(L"Failed to uninject (%d)\n", injectedProcess.pid);
-            CloseHandle(injectedProcess.hProcess);
-            continue;
-        }
-
-        WaitForSingleObject(threadPtr.get(), INFINITE);
-        DWORD exitCode = 0;
-        GetExitCodeThread(threadPtr.get(), &exitCode);
-        CloseHandle(injectedProcess.hProcess);
-        log(L"(%d) uninjected with code %d\n", injectedProcess.pid, exitCode);
-    }
-    m_injectedProcesses.clear();
 }
