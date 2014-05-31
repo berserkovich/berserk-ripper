@@ -22,25 +22,16 @@ private:
     void CheckProcesses();
     bool CheckModules(DWORD pid);
     bool InjectProcess(DWORD pid);
-    void ClearProcesses();
 
 private:
     typedef std::unique_ptr<std::remove_pointer<HWND>::type, decltype(&::DestroyWindow)> unique_wnd_ptr;
     typedef std::unique_ptr<std::remove_pointer<HANDLE>::type, decltype(&::CloseHandle)> unique_handle_ptr;
 
-    struct InjectedProcess
-    {
-        DWORD pid;
-        HANDLE hProcess;
-        DWORD hInjectedModule;
-    };
-
 private:
     const HINSTANCE m_hInstance;
     const int m_nCmdShow;
 
+    unique_handle_ptr m_sharedMutex;
     unique_sharedmem_ptr m_sharedMemPtr;
     unique_wnd_ptr m_wndPtr;
-
-    std::vector<InjectedProcess> m_injectedProcesses;
 };

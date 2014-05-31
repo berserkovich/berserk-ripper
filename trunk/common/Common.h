@@ -5,6 +5,7 @@
 #include <functional>
 #include <memory>
 
+static const wchar_t SHARED_MUTEX_NAME[] = L"BerserkRipperSharedMutex";
 static const wchar_t FILE_MAPPING_OBJECT_NAME[] = L"BerserkRipperSharedObject";
 
 struct D3D9DeviceOffsets
