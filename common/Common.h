@@ -15,3 +15,5 @@ struct D3D9DeviceOffsets
 typedef std::unique_ptr<void, std::function<void(void*)>> unique_sharedmem_ptr;
 unique_sharedmem_ptr CreateSharedMemory(const wchar_t* name, size_t size);
 unique_sharedmem_ptr OpenSHaredMemory(const wchar_t* name, size_t size);
+
+void log(const wchar_t* format, ...);
