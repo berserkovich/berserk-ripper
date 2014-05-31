@@ -2,6 +2,8 @@
 
 #include "Platform.h"
 
+#include <Strsafe.h>
+
 unique_sharedmem_ptr CreateSharedMemory(const wchar_t* name, size_t size)
 {
     HANDLE hMapFile = ::CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(D3D9DeviceOffsets), name);
@@ -38,4 +40,13 @@ unique_sharedmem_ptr OpenSHaredMemory(const wchar_t* name, size_t size)
 
     auto sharedMemDeleter = [=](void* ptr){ ::UnmapViewOfFile(ptr); ::CloseHandle(hMapFile); };
     return unique_sharedmem_ptr(pSharedMemory, sharedMemDeleter);
+}
+
+void log(const wchar_t* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    wchar_t buffer[1024];
+    StringCbVPrintf(buffer, 1024, format, args);
+    OutputDebugString(buffer);
 }

@@ -5,4 +5,4 @@ add_executable(BerserkRipper WIN32
         Ripper.h
         RipperD3D9.cpp
         WinMain.cpp)
-target_link_libraries(BerserkRipper common libinject)
+target_link_libraries(BerserkRipper common)
