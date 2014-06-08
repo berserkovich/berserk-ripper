@@ -13,8 +13,13 @@ struct D3D9DeviceOffsets
     ptrdiff_t Present;
 };
 
+struct SharedData
+{
+    D3D9DeviceOffsets d3d9DeviceOffsets;
+};
+
 typedef std::unique_ptr<void, std::function<void(void*)>> unique_sharedmem_ptr;
 unique_sharedmem_ptr CreateSharedMemory(const wchar_t* name, size_t size);
-unique_sharedmem_ptr OpenSHaredMemory(const wchar_t* name, size_t size);
+unique_sharedmem_ptr OpenSharedMemory(const wchar_t* name, size_t size);
 
 void log(const wchar_t* format, ...);

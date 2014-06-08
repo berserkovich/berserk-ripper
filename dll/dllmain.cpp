@@ -1,4 +1,5 @@
-#include "common/Common.h"
+#include "Hooks.h"
+
 #include "common/Platform.h"
 
 DWORD WINAPI SelfDestruct(LPVOID lpThreadParameter)
@@ -16,12 +17,16 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
     if (fdwReason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(hinstDLL);
+        if (!InitHooks())
+        {
+            return FALSE;
+        }
         CreateThread(NULL, 0, &SelfDestruct, hinstDLL, 0, NULL);
         return TRUE;
     }
     else if(fdwReason == DLL_PROCESS_DETACH)
     {
-
+        RevertHooks();
     }
 
     return TRUE;

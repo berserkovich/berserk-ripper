@@ -23,7 +23,7 @@ unique_sharedmem_ptr CreateSharedMemory(const wchar_t* name, size_t size)
     return unique_sharedmem_ptr(pSharedMemory, sharedMemDeleter);
 }
 
-unique_sharedmem_ptr OpenSHaredMemory(const wchar_t* name, size_t size)
+unique_sharedmem_ptr OpenSharedMemory(const wchar_t* name, size_t size)
 {
     HANDLE hMapFile = ::OpenFileMapping(FILE_MAP_ALL_ACCESS, FALSE, name);
     if (hMapFile == NULL)
