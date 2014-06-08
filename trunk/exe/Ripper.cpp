@@ -2,10 +2,13 @@
 
 #include <algorithm>
 
-#include <TlHelp32.h>
-
 static const UINT_PTR CHECK_PROCESSES_TIMER_ID = 1;
 static const UINT CHECK_PROCESSES_TIMER_TIMEOUT = 1000;
+
+static const wchar_t* ProcessExclusionList[] = {
+    L"chrome.exe",
+    L"skype.exe"
+};
 
 LRESULT WINAPI RipperWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
@@ -56,15 +59,15 @@ bool RipperApp::Initialize()
         return false;
     }
 
-    m_sharedMemPtr = CreateSharedMemory(FILE_MAPPING_OBJECT_NAME, sizeof(D3D9DeviceOffsets));
+    m_sharedMemPtr = CreateSharedMemory(FILE_MAPPING_OBJECT_NAME, sizeof(SharedData));
     if (!m_sharedMemPtr)
     {
         log(L"Failed to create shared memory\n");
         return false;
     }
 
-    D3D9DeviceOffsets* d3d9DeviceOffsets = new (m_sharedMemPtr.get()) D3D9DeviceOffsets();
-    UpdateD3D9Info(m_hInstance, d3d9DeviceOffsets);
+    SharedData* sharedData = new (m_sharedMemPtr.get()) SharedData();
+    UpdateD3D9Info(m_hInstance, &sharedData->d3d9DeviceOffsets);
 
     WNDCLASSEX wndClass = {};
     wndClass.cbSize = sizeof(wndClass);
@@ -150,7 +153,7 @@ void RipperApp::CheckProcesses()
 
     do
     {
-        if (::GetCurrentProcessId() == processInfo.th32ProcessID)
+        if (FilterProcess(processInfo))
         {
             continue;
         }
@@ -250,4 +253,20 @@ bool RipperApp::InjectProcess(DWORD pid)
     VirtualFreeEx(processPtr.get(), remoteModulePathBuffer, 0, MEM_RELEASE);
 
     return true;
+}
+
+bool RipperApp::FilterProcess(const PROCESSENTRY32& processInfo)
+{
+    if (::GetCurrentProcessId() == processInfo.th32ProcessID)
+    {
+        return true;
+    }
+
+    auto itEnd = ProcessExclusionList + sizeof(ProcessExclusionList) / sizeof(const wchar_t*);
+    auto itFind = std::find_if(ProcessExclusionList, itEnd, [&](const wchar_t* processName)
+    {
+        return _wcsicmp(processName, processInfo.szExeFile) == 0;
+    });
+
+    return itFind != itEnd;
 }

@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 
+#include <TlHelp32.h>
+
 void UpdateD3D9Info(HINSTANCE _hInst, D3D9DeviceOffsets* d3d9DeviceOffsets);
 
 class RipperApp
@@ -22,6 +24,7 @@ private:
     void CheckProcesses();
     bool CheckModules(DWORD pid);
     bool InjectProcess(DWORD pid);
+    bool FilterProcess(const PROCESSENTRY32& processInfo);
 
 private:
     typedef std::unique_ptr<std::remove_pointer<HWND>::type, decltype(&::DestroyWindow)> unique_wnd_ptr;

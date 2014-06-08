@@ -4,6 +4,8 @@ include_directories(${CMAKE_SOURCE_DIR}/minhook/include)
 
 add_library(Ripper SHARED 
             dllmain.cpp 
-            RipperDX9.h 
-            RipperDX9.cpp)
+            Hooks.cpp
+            Hooks.h
+            RipperDX9.cpp
+            RipperDX9.h)
 target_link_libraries(Ripper common minhook)
