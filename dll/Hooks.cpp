@@ -1,7 +1,8 @@
 #include "Hooks.h"
 
 #include "common/Platform.h"
-#include "RipperDX9.h"
+#include "D3D9Hooks.h"
+#include "InputHooks.h"
 
 #include "MinHook.h"
 
@@ -34,5 +35,6 @@ bool InitHooks()
 void RevertHooks()
 {
     RevertD3D9Hooks();
+    g_inputHooks.RevertHooks();
     MH_Uninitialize();
 }
