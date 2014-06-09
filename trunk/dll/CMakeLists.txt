@@ -6,6 +6,8 @@ add_library(Ripper SHARED
             dllmain.cpp 
             Hooks.cpp
             Hooks.h
-            RipperDX9.cpp
-            RipperDX9.h)
+            InputHooks.cpp
+            InputHooks.h
+            D3D9Hooks.cpp
+            D3D9Hooks.h)
 target_link_libraries(Ripper common minhook)
