@@ -123,6 +123,53 @@ HRESULT Hooked_IDirect3DDevice9_Present(IDirect3DDevice9* pThis, CONST RECT* pSo
     IDirect3DBaseTexture9* baseTexture = NULL;
     IUnknown_QueryInterface(g_deviceInfo.overlayTexture, __uuidof(IDirect3DBaseTexture9), reinterpret_cast<void**>(&baseTexture));
     IDirect3DDevice9_SetTexture(pThis, 0, baseTexture);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_LIGHTING, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_CULLMODE, D3DCULL_NONE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_ALPHABLENDENABLE, TRUE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_BLENDOP, D3DBLENDOP_ADD);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_ZWRITEENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_ZFUNC, D3DCMP_ALWAYS);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_BLENDFACTOR, 0xFFFFFFFF);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_STENCILENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_TEXTUREFACTOR, 0xFFFFFFFF);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_AMBIENT, 0);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_VERTEXBLEND, D3DVBF_DISABLE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_INDEXEDVERTEXBLENDENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_ZENABLE, D3DZB_FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_FILLMODE, D3DFILL_SOLID);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_ALPHATESTENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_DITHERENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_FOGENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_SPECULARENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_CLIPPING, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_CLIPPLANEENABLE, FALSE);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_COLORWRITEENABLE, 0x0000000F);
+    IDirect3DDevice9_SetRenderState(pThis, D3DRS_SRGBWRITEENABLE, FALSE);
+
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_ADDRESSU, D3DTADDRESS_BORDER);
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_ADDRESSV, D3DTADDRESS_BORDER);
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_ADDRESSW, D3DTADDRESS_BORDER);
+    IDirect3DDevice9_SetSamplerState(pThis, 0, D3DSAMP_SRGBTEXTURE, FALSE);
+
+    IDirect3DDevice9_SetTextureStageState(pThis, 0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+    IDirect3DDevice9_SetTextureStageState(pThis, 0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+    IDirect3DDevice9_SetTextureStageState(pThis, 0, D3DTSS_COLORARG2, D3DTA_CURRENT);
+    IDirect3DDevice9_SetTextureStageState(pThis, 0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+    IDirect3DDevice9_SetTextureStageState(pThis, 0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+    IDirect3DDevice9_SetTextureStageState(pThis, 0, D3DTSS_ALPHAARG2, D3DTA_CURRENT);
+
+    for (DWORD stage = 1; stage < D3DDP_MAXTEXCOORD; ++stage)
+    {
+        IDirect3DDevice9_SetTextureStageState(pThis, stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+        IDirect3DDevice9_SetTextureStageState(pThis, stage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+    }
+
     IDirect3DDevice9_DrawPrimitiveUP(pThis, D3DPT_TRIANGLESTRIP, 2, overlayQuad, sizeof(float) * 6);
     
     CComSafeRelease(baseTexture);
