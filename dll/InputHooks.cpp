@@ -21,6 +21,8 @@ InputHooks::~InputHooks()
 
 void InputHooks::HookWindow(HWND hWnd)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
     if (hWnd == m_hwnd)
     {
         return;
@@ -38,7 +40,9 @@ void InputHooks::HookWindow(HWND hWnd)
 
 void InputHooks::RevertHooks()
 {
-    if (!m_hwnd)
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (!m_hwnd)
     {
         return;
     }
@@ -50,15 +54,37 @@ void InputHooks::RevertHooks()
 
 LRESULT InputHooks::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
-    if (hWnd != m_hwnd)
+	HWND thisHwnd;
+	WNDPROC thisWndProc;
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		thisHwnd = m_hwnd;
+		thisWndProc = m_originalWndProc;
+	}
+
+	if (hWnd != thisHwnd)
     {
         return DefWindowProc(hWnd, Msg, wParam, lParam);
     }
 
     if (GetAsyncKeyState(VK_NUMPAD0) != 0)
     {
-        OutputDebugString(L"Ping from hook");
+		OutputDebugString(L"Capture active");
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_captureActive = true;
     }
 
-    return CallWindowProc(m_originalWndProc, m_hwnd, Msg, wParam, lParam);
+	return CallWindowProc(thisWndProc, thisHwnd, Msg, wParam, lParam);
+}
+
+bool InputHooks::IsCaptureActive()
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	return m_captureActive;
+}
+
+void InputHooks::ResetCapture()
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+	m_captureActive = false;
 }
