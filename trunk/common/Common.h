@@ -10,6 +10,12 @@ static const wchar_t FILE_MAPPING_OBJECT_NAME[] = L"BerserkRipperSharedObject";
 
 struct D3D9DeviceOffsets
 {
+    ptrdiff_t DrawIndexedPrimitive;
+    ptrdiff_t DrawIndexedPrimitiveUP;
+    ptrdiff_t DrawPrimitive;
+    ptrdiff_t DrawPrimitiveUP;
+    ptrdiff_t DrawRectPatch;
+    ptrdiff_t DrawTriPatch;
     ptrdiff_t Present;
 };
 
