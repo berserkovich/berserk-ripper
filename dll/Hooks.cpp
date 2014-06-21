@@ -1,12 +1,11 @@
 #include "Hooks.h"
 
-#include "common/Platform.h"
 #include "D3D9Hooks.h"
 #include "InputHooks.h"
 
-#include "MinHook.h"
-
 SharedData g_sharedData = {};
+
+USE_HOOK_MODULE(d3d9);
 
 bool InitHooks()
 {
@@ -23,18 +22,48 @@ bool InitHooks()
         return false;
     }
 
-    HMODULE hD3D9 = GetModuleHandle(L"d3d9.dll");
-    if (hD3D9)
-    {
-        InitD3D9Hooks(hD3D9);
-    }
+    ENABLE_HOOK_MODULE(d3d9);
 
     return true;
 }
 
 void RevertHooks()
 {
-    RevertD3D9Hooks();
+    DISABLE_HOOK_MODULE(d3d9);
     g_inputHooks.RevertHooks();
     MH_Uninitialize();
+}
+
+bool EnableModule(HookModule& hookModule)
+{
+    HMODULE hModule = GetModuleHandleA(hookModule.name);
+    if (!hModule)
+    {
+        return true;
+    }
+
+    for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
+    {
+        if ((*it)->CreateHook(hModule) == false)
+        {
+            return false;
+        }
+    }
+
+    return MH_EnableHook(MH_ALL_HOOKS) == MH_OK;
+}
+
+void DisableModule(HookModule& hookModule)
+{
+    for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
+    {
+        (*it)->DisableHook();
+    }
+
+    MH_DisableHook(MH_ALL_HOOKS);
+
+    for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
+    {
+        (*it)->RemoveHook();
+    }
 }

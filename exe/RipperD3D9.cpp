@@ -83,5 +83,11 @@ void UpdateD3D9Info(HINSTANCE _hInst, D3D9DeviceOffsets* d3d9DeviceOffsets)
     auto d3dDeviceDeleter = [](IDirect3DDevice9* _d3d9Device){ _d3d9Device->lpVtbl->Release(_d3d9Device); };
     std::unique_ptr<IDirect3DDevice9, decltype(d3dDeviceDeleter)> pDevice(pD3D9Device, d3dDeviceDeleter);
 
+    d3d9DeviceOffsets->DrawIndexedPrimitive = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawIndexedPrimitive) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
+    d3d9DeviceOffsets->DrawIndexedPrimitiveUP = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawIndexedPrimitiveUP) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
+    d3d9DeviceOffsets->DrawPrimitive = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawPrimitive) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
+    d3d9DeviceOffsets->DrawPrimitiveUP = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawPrimitiveUP) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
+    d3d9DeviceOffsets->DrawRectPatch = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawRectPatch) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
+    d3d9DeviceOffsets->DrawTriPatch = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawTriPatch) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
     d3d9DeviceOffsets->Present = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->Present) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
 }

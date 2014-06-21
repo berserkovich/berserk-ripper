@@ -3,13 +3,20 @@
 #include "Hooks.h"
 #include "InputHooks.h"
 
-#include "MinHook.h"
-
 #include <cassert>
 
 #define CINTERFACE
 #define COBJMACROS
 #include <d3d9.h>
+
+DECLARE_HOOK_MODULE(d3d9);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_Present, IDirect3DDevice9Present, g_sharedData.d3d9DeviceOffsets.Present, HRESULT, IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_DIP, IDirect3DDevice9DIP, g_sharedData.d3d9DeviceOffsets.DrawIndexedPrimitive, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_DIPUP, IDirect3DDevice9DIPUP, g_sharedData.d3d9DeviceOffsets.DrawIndexedPrimitiveUP, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT, UINT, CONST void*, D3DFORMAT, CONST void*, UINT);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_DP, IDirect3DDevice9DP, g_sharedData.d3d9DeviceOffsets.DrawPrimitive, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_DPUP, IDirect3DDevice9DPUP, g_sharedData.d3d9DeviceOffsets.DrawPrimitiveUP, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, CONST void*, UINT);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_DrawRectPatch, IDirect3DDevice9DrawRectPatch, g_sharedData.d3d9DeviceOffsets.DrawRectPatch, HRESULT, IDirect3DDevice9*, UINT, CONST float*, CONST D3DRECTPATCH_INFO*);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_DrawTriPatch, IDirect3DDevice9DrawTriPatch, g_sharedData.d3d9DeviceOffsets.DrawTriPatch, HRESULT, IDirect3DDevice9*, UINT, CONST float*, CONST D3DTRIPATCH_INFO*);
 
 template<typename ComType>
 void CComSafeRelease(ComType* comObject)
@@ -95,11 +102,7 @@ void UpdateDeviceInfo(IDirect3DDevice9* device)
     CreateOverlayTexture();
 }
 
-typedef HRESULT(STDMETHODCALLTYPE* IDirect3DDevice9_PresentPtr)(IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
-IDirect3DDevice9_PresentPtr Target_IDirect3DDevice9_Present = NULL;
-IDirect3DDevice9_PresentPtr Real_IDirect3DDevice9_Present = NULL;
-
-HRESULT Hooked_IDirect3DDevice9_Present(IDirect3DDevice9* pThis, CONST RECT* pSourceRect, CONST RECT* pDestRect, HWND hDestWindowOverride, CONST RGNDATA* pDirtyRegion)
+HRESULT __stdcall Hooked_IDirect3DDevice9Present(IDirect3DDevice9* pThis, CONST RECT* pSourceRect, CONST RECT* pDestRect, HWND hDestWindowOverride, CONST RGNDATA* pDirtyRegion)
 {
     if (pThis != g_deviceInfo.device)
     {
@@ -179,37 +182,42 @@ HRESULT Hooked_IDirect3DDevice9_Present(IDirect3DDevice9* pThis, CONST RECT* pSo
 
     IDirect3DStateBlock9_Apply(g_deviceInfo.stateBlock);
 
-    return Real_IDirect3DDevice9_Present(pThis, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+    log(L"Present");
+    return hIDirect3DDevice9_Present.m_real(pThis, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
 }
 
-bool InitD3D9Hooks(HMODULE hModule)
+HRESULT __stdcall Hooked_IDirect3DDevice9DIP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount)
 {
-   // MessageBox(NULL, L"attach", L"ripper", 0);
-
-    Target_IDirect3DDevice9_Present = reinterpret_cast<IDirect3DDevice9_PresentPtr>(reinterpret_cast<unsigned char*>(hModule)+g_sharedData.d3d9DeviceOffsets.Present);
-    if (MH_CreateHook(Target_IDirect3DDevice9_Present, &Hooked_IDirect3DDevice9_Present, reinterpret_cast<void**>(&Real_IDirect3DDevice9_Present)) != MH_OK
-        || MH_QueueEnableHook(Target_IDirect3DDevice9_Present) != MH_OK)
-    {
-        return false;
-    }
-
-    if (MH_EnableHook(MH_ALL_HOOKS) != MH_OK)
-    {
-        return false;
-    }
-
-    return true;
+    log(L"DrawIndexedPrimitive");
+    return hIDirect3DDevice9_DIP.m_real(pThis, Type, BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount);
 }
 
-void RevertD3D9Hooks()
+HRESULT __stdcall Hooked_IDirect3DDevice9DIPUP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, CONST void* pIndexData, D3DFORMAT IndexDataFormat, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-    if (Target_IDirect3DDevice9_Present == NULL)
-    {
-        return;
-    }
+    log(L"DrawIndexedPrimitiveUP");
+    return hIDirect3DDevice9_DIPUP.m_real(pThis, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+}
 
-    MH_QueueDisableHook(Target_IDirect3DDevice9_Present);
-    MH_DisableHook(MH_ALL_HOOKS);
+HRESULT __stdcall Hooked_IDirect3DDevice9DP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE Type, UINT MinIndex, UINT NumVertices)
+{
+    log(L"DrawPrimitive");
+    return hIDirect3DDevice9_DP.m_real(pThis, Type, MinIndex, NumVertices);
+}
 
-    MH_RemoveHook(Target_IDirect3DDevice9_Present);
+HRESULT __stdcall Hooked_IDirect3DDevice9DPUP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
+{
+    log(L"DrawPrimitiveUP");
+    return hIDirect3DDevice9_DPUP.m_real(pThis, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+}
+
+HRESULT __stdcall Hooked_IDirect3DDevice9DrawRectPatch(IDirect3DDevice9* pThis, UINT Handle, CONST float* pNumSegs, CONST D3DRECTPATCH_INFO* pRectPatchInfo)
+{
+    log(L"DrawRectPatch");
+    return hIDirect3DDevice9_DrawRectPatch.m_real(pThis, Handle, pNumSegs, pRectPatchInfo);
+}
+
+HRESULT __stdcall Hooked_IDirect3DDevice9DrawTriPatch(IDirect3DDevice9* pThis, UINT Handle, CONST float* pNumSegs, CONST D3DTRIPATCH_INFO* pTriPatchInfo)
+{
+    log(L"DrawTriPatch");
+    return hIDirect3DDevice9_DrawTriPatch.m_real(pThis, Handle, pNumSegs, pTriPatchInfo);
 }
