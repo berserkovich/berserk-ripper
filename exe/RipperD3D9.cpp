@@ -90,4 +90,5 @@ void UpdateD3D9Info(HINSTANCE _hInst, D3D9DeviceOffsets* d3d9DeviceOffsets)
     d3d9DeviceOffsets->DrawRectPatch = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawRectPatch) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
     d3d9DeviceOffsets->DrawTriPatch = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->DrawTriPatch) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
     d3d9DeviceOffsets->Present = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->Present) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
+    d3d9DeviceOffsets->Reset = reinterpret_cast<unsigned char*>(pDevice->lpVtbl->Reset) - reinterpret_cast<unsigned char*>(pD3D9Dll.get());
 }

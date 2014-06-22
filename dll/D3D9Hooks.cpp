@@ -1,13 +1,15 @@
-#include "D3D9Hooks.h"
-
 #include "Hooks.h"
+
 #include "InputHooks.h"
 
 #include <cassert>
+#include <mutex>
 
 #define CINTERFACE
 #define COBJMACROS
 #include <d3d9.h>
+
+#define MAX_TEXTURE_COUNT 8
 
 DECLARE_HOOK_MODULE(d3d9);
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_Present, IDirect3DDevice9Present, g_sharedData.d3d9DeviceOffsets.Present, HRESULT, IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
@@ -17,6 +19,7 @@ DECLARE_HOOK(d3d9, hIDirect3DDevice9_DP, IDirect3DDevice9DP, g_sharedData.d3d9De
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_DPUP, IDirect3DDevice9DPUP, g_sharedData.d3d9DeviceOffsets.DrawPrimitiveUP, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, CONST void*, UINT);
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_DrawRectPatch, IDirect3DDevice9DrawRectPatch, g_sharedData.d3d9DeviceOffsets.DrawRectPatch, HRESULT, IDirect3DDevice9*, UINT, CONST float*, CONST D3DRECTPATCH_INFO*);
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_DrawTriPatch, IDirect3DDevice9DrawTriPatch, g_sharedData.d3d9DeviceOffsets.DrawTriPatch, HRESULT, IDirect3DDevice9*, UINT, CONST float*, CONST D3DTRIPATCH_INFO*);
+DECLARE_HOOK(d3d9, hIDirect3DDevice9_Reset, IDirect3DDevice9Reset, g_sharedData.d3d9DeviceOffsets.Reset, HRESULT, IDirect3DDevice9*, D3DPRESENT_PARAMETERS*);
 
 template<typename ComType>
 void CComSafeRelease(ComType* comObject)
@@ -38,6 +41,15 @@ struct D3D9DeviceInfo
     IDirect3DTexture9* overlayTexture;
 };
 D3D9DeviceInfo g_deviceInfo = {};
+
+struct D3D9CaptureInfo
+{
+    std::mutex lock;
+    bool isActive;
+    size_t frameNumber;
+    size_t drawCallNumber;
+};
+D3D9CaptureInfo g_d3d9CaptureInfo = {};
 
 const float overlayQuad[] =
 {
@@ -100,6 +112,46 @@ void UpdateDeviceInfo(IDirect3DDevice9* device)
     IDirect3DDevice9_CreateStateBlock(device, D3DSBT_ALL, &g_deviceInfo.stateBlock);
     g_deviceInfo.device = device;
     CreateOverlayTexture();
+}
+
+void D3D9CaptureTextures(IDirect3DDevice9* pThis)
+{
+    IDirect3DBaseTexture9* srcTextures[MAX_TEXTURE_COUNT] = {};
+    
+    for (DWORD i = 0; i < MAX_TEXTURE_COUNT; ++i)
+    {
+        IDirect3DDevice9_GetTexture(pThis, i, &srcTextures[i]);
+        if (srcTextures[i] == nullptr)
+        {
+            break;
+        }
+
+        IDirect3DTexture9* texture = nullptr;
+        IDirect3DBaseTexture9_QueryInterface(srcTextures[i], __uuidof(IDirect3DTexture9), reinterpret_cast<void**>(&texture));
+        if (texture == nullptr)
+        {
+            continue;
+        }
+
+        wchar_t textureName[MAX_PATH];
+        wsprintf(textureName, L"texture_%d_%d.png", g_d3d9CaptureInfo.drawCallNumber, i);
+        D3DSURFACE_DESC desc = {};
+        IDirect3DTexture9_GetLevelDesc(texture, 0, &desc);
+        D3DLOCKED_RECT lockedRect = {};
+        IDirect3DTexture9_LockRect(texture, 0, &lockedRect, NULL, D3DLOCK_READONLY);
+        if (lockedRect.pBits)
+        {
+            SaveTexture(textureName, desc.Width, desc.Height, lockedRect.pBits, lockedRect.Pitch);
+            IDirect3DTexture9_UnlockRect(texture, 0);
+        }
+
+        CComSafeRelease(texture);
+    }
+
+    for (DWORD i = 0; i < MAX_TEXTURE_COUNT; ++i)
+    {
+        CComSafeRelease(srcTextures[i]);
+    }
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9Present(IDirect3DDevice9* pThis, CONST RECT* pSourceRect, CONST RECT* pDestRect, HWND hDestWindowOverride, CONST RGNDATA* pDirtyRegion)
@@ -173,7 +225,7 @@ HRESULT __stdcall Hooked_IDirect3DDevice9Present(IDirect3DDevice9* pThis, CONST 
         IDirect3DDevice9_SetTextureStageState(pThis, stage, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
     }
 
-    IDirect3DDevice9_DrawPrimitiveUP(pThis, D3DPT_TRIANGLESTRIP, 2, overlayQuad, sizeof(float) * 6);
+    hIDirect3DDevice9_DPUP.m_real(pThis, D3DPT_TRIANGLESTRIP, 2, overlayQuad, sizeof(float) * 6);
     
     CComSafeRelease(baseTexture);
     CComSafeRelease(pBackBuffer);
@@ -182,42 +234,110 @@ HRESULT __stdcall Hooked_IDirect3DDevice9Present(IDirect3DDevice9* pThis, CONST 
 
     IDirect3DStateBlock9_Apply(g_deviceInfo.stateBlock);
 
-    log(L"Present");
-    return hIDirect3DDevice9_Present.m_real(pThis, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::Present");
+            g_d3d9CaptureInfo.isActive = false;
+            g_d3d9CaptureInfo.frameNumber += 1;
+            g_inputHooks.ResetCapture();
+        }
+    }
+
+    HRESULT hr = hIDirect3DDevice9_Present.m_real(pThis, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+
+    if (g_inputHooks.IsCaptureActive())
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        g_d3d9CaptureInfo.isActive = true;
+        g_d3d9CaptureInfo.drawCallNumber = 0;
+    }
+    return hr;
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DIP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount)
 {
-    log(L"DrawIndexedPrimitive");
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::DrawIndexedPrimitive");
+            D3D9CaptureTextures(pThis);
+            g_d3d9CaptureInfo.drawCallNumber += 1;
+        }
+    }
     return hIDirect3DDevice9_DIP.m_real(pThis, Type, BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DIPUP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, CONST void* pIndexData, D3DFORMAT IndexDataFormat, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-    log(L"DrawIndexedPrimitiveUP");
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::DrawIndexedPrimitiveUP");
+        }
+    }
     return hIDirect3DDevice9_DIPUP.m_real(pThis, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE Type, UINT MinIndex, UINT NumVertices)
 {
-    log(L"DrawPrimitive");
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::DrawPrimitive");
+        }
+    }
     return hIDirect3DDevice9_DP.m_real(pThis, Type, MinIndex, NumVertices);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DPUP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-    log(L"DrawPrimitiveUP");
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::DrawPrimitiveUP");
+        }
+    }
     return hIDirect3DDevice9_DPUP.m_real(pThis, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DrawRectPatch(IDirect3DDevice9* pThis, UINT Handle, CONST float* pNumSegs, CONST D3DRECTPATCH_INFO* pRectPatchInfo)
 {
-    log(L"DrawRectPatch");
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::DrawRectPatch");
+        }
+    }
     return hIDirect3DDevice9_DrawRectPatch.m_real(pThis, Handle, pNumSegs, pRectPatchInfo);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DrawTriPatch(IDirect3DDevice9* pThis, UINT Handle, CONST float* pNumSegs, CONST D3DTRIPATCH_INFO* pTriPatchInfo)
 {
-    log(L"DrawTriPatch");
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.isActive)
+        {
+            log(L"IDirect3DDevice9::DrawTriPatch");
+        }
+    }
     return hIDirect3DDevice9_DrawTriPatch.m_real(pThis, Handle, pNumSegs, pTriPatchInfo);
+}
+
+HRESULT __stdcall Hooked_IDirect3DDevice9Reset(IDirect3DDevice9* pThis, D3DPRESENT_PARAMETERS* pPresentationParameters)
+{
+    log(L"IDirect3DDevice9::Reset");
+    CComSafeRelease(g_deviceInfo.stateBlock);
+    HRESULT hr = hIDirect3DDevice9_Reset.m_real(pThis, pPresentationParameters);
+    if (SUCCEEDED(hr))
+    {
+        UpdateDeviceInfo(pThis);
+    }
+    return hr;
 }

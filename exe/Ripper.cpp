@@ -7,7 +7,8 @@ static const UINT CHECK_PROCESSES_TIMER_TIMEOUT = 1000;
 
 static const wchar_t* ProcessExclusionList[] = {
     L"chrome.exe",
-    L"skype.exe"
+    L"skype.exe",
+    L"WDExpress.exe"
 };
 
 LRESULT WINAPI RipperWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
@@ -68,6 +69,7 @@ bool RipperApp::Initialize()
 
     SharedData* sharedData = new (m_sharedMemPtr.get()) SharedData();
     UpdateD3D9Info(m_hInstance, &sharedData->d3d9DeviceOffsets);
+    GetCurrentDirectory(260, sharedData->saveFolder);
 
     WNDCLASSEX wndClass = {};
     wndClass.cbSize = sizeof(wndClass);
