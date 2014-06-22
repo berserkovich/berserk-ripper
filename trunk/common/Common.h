@@ -17,11 +17,13 @@ struct D3D9DeviceOffsets
     ptrdiff_t DrawRectPatch;
     ptrdiff_t DrawTriPatch;
     ptrdiff_t Present;
+    ptrdiff_t Reset;
 };
 
 struct SharedData
 {
     D3D9DeviceOffsets d3d9DeviceOffsets;
+    wchar_t saveFolder[260];
 };
 
 typedef std::unique_ptr<void, std::function<void(void*)>> unique_sharedmem_ptr;

@@ -11,6 +11,7 @@ extern SharedData g_sharedData;
 
 bool InitHooks();
 void RevertHooks();
+void SaveTexture(const wchar_t* name, size_t width, size_t height, void* pData, int pitch);
 
 struct HookBase
 {
