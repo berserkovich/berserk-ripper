@@ -59,6 +59,20 @@ const float overlayQuad[] =
     64.0f, 64.0f, 0.0f, 1.0f, 1.0f, 1.0f,
 };
 
+TextureFormat ConvertD3D9TextureFormat(D3DFORMAT d3dFormat)
+{
+    switch (d3dFormat)
+    {
+    case D3DFMT_A8R8G8B8:
+        return TextureFormat_ARGB;
+    case D3DFMT_X8R8G8B8:
+        return TextureFormat_XRGB;
+    }
+
+    log(L"Unimplemented texture format: %d", d3dFormat);
+    return TextureFormat_Unknown;
+}
+
 void CreateOverlayTexture()
 {
     if (g_deviceInfo.isExDevice)
@@ -134,15 +148,19 @@ void D3D9CaptureTextures(IDirect3DDevice9* pThis)
         }
 
         wchar_t textureName[MAX_PATH];
-        wsprintf(textureName, L"texture_%d_%d.png", g_d3d9CaptureInfo.drawCallNumber, i);
+        wsprintf(textureName, L"texture_%d_%d", g_d3d9CaptureInfo.drawCallNumber, i);
         D3DSURFACE_DESC desc = {};
         IDirect3DTexture9_GetLevelDesc(texture, 0, &desc);
         D3DLOCKED_RECT lockedRect = {};
         IDirect3DTexture9_LockRect(texture, 0, &lockedRect, NULL, D3DLOCK_READONLY);
         if (lockedRect.pBits)
         {
-            SaveTexture(textureName, desc.Width, desc.Height, lockedRect.pBits, lockedRect.Pitch);
+            SaveTexture(textureName, desc.Width, desc.Height, ConvertD3D9TextureFormat(desc.Format), lockedRect.pBits, lockedRect.Pitch);
             IDirect3DTexture9_UnlockRect(texture, 0);
+        }
+        else
+        {
+            log(L"Failed to lock texture");
         }
 
         CComSafeRelease(texture);
