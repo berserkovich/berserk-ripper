@@ -3,6 +3,9 @@
 #include "Common.h"
 #include "Platform.h"
 
+#include <ddraw.h>
+
+#include <algorithm>
 #include <cassert>
 
 #pragma pack(push, 1)
@@ -78,6 +81,96 @@ bool WriteTGA(const std::wstring& name, size_t width, size_t height, TextureForm
     {
         bytesWritten = 0;
         if (!WriteFile(filePtr.get(), row, width * header.bpp / 8, &bytesWritten, NULL))
+        {
+            log(L"Write operation failed");
+            return false;
+        }
+        row += pitch;
+    }
+
+    return true;
+}
+
+static const DWORD DDS_MAGIC = 0x20534444;
+
+#pragma pack(push, 1)
+struct DDS_PIXELFORMAT
+{
+    DWORD dwSize;
+    DWORD dwFlags;
+    DWORD dwFourCC;
+    DWORD dwRGBBitCount;
+    DWORD dwRBitMask;
+    DWORD dwGBitMask;
+    DWORD dwBBitMask;
+    DWORD dwABitMask;
+};
+
+struct DDS_HEADER
+{
+    DWORD           dwSize;
+    DWORD           dwFlags;
+    DWORD           dwHeight;
+    DWORD           dwWidth;
+    DWORD           dwPitchOrLinearSize;
+    DWORD           dwDepth;
+    DWORD           dwMipMapCount;
+    DWORD           dwReserved1[11];
+    DDS_PIXELFORMAT ddspf;
+    DWORD           dwCaps;
+    DWORD           dwCaps2;
+    DWORD           dwCaps3;
+    DWORD           dwCaps4;
+    DWORD           dwReserved2;
+};
+#pragma pack(pop)
+
+bool WriteDDS(const std::wstring& name, size_t width, size_t height, TextureFormat format, void* pData, int pitch)
+{
+    if (format < TextureFormat_DXT1
+        || format > TextureFormat_DXT5)
+    {
+        return false;
+    }
+
+    unique_handle_ptr filePtr(CreateFile(name.c_str(), GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL),
+                                 &FileDeleter);
+    if (filePtr.get() == INVALID_HANDLE_VALUE)
+    {
+        log(L"Failed to create file (%d)", GetLastError());
+        return false;
+    }
+
+    DWORD bytesWritten = 0;
+    if (!WriteFile(filePtr.get(), &DDS_MAGIC, sizeof(DDS_MAGIC), &bytesWritten, NULL))
+    {
+        log(L"Write operation failed");
+        return false;
+    }
+
+    DDS_HEADER header;
+    header.dwSize = sizeof(header);
+    header.dwFlags = DDSD_CAPS | DDSD_WIDTH | DDSD_HEIGHT | DDSD_PIXELFORMAT;
+    header.dwHeight = static_cast<DWORD>(height);
+    header.dwWidth = static_cast<DWORD>(width);
+    header.ddspf.dwSize = sizeof(DDS_PIXELFORMAT);
+    header.ddspf.dwFlags = DDPF_FOURCC;
+    header.ddspf.dwFourCC = MAKEFOURCC('D', 'X', 'T', '1' + format - TextureFormat_DXT1);
+    header.dwCaps = DDSCAPS_TEXTURE;
+
+    bytesWritten = 0;
+    if (!WriteFile(filePtr.get(), &header, sizeof(header), &bytesWritten, NULL))
+    {
+        log(L"Write operation failed");
+        return false;
+    }
+
+    size_t normalizedPitch = (std::max)(1u, (width + 3) / 4) * ((format == TextureFormat_DXT1) ? 8 : 16);
+    uint8_t* row = static_cast<uint8_t*>(pData);
+    for (size_t i = 0; i < height; ++i)
+    {
+        bytesWritten = 0;
+        if (!WriteFile(filePtr.get(), row, normalizedPitch, &bytesWritten, NULL))
         {
             log(L"Write operation failed");
             return false;

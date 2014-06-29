@@ -67,6 +67,16 @@ TextureFormat ConvertD3D9TextureFormat(D3DFORMAT d3dFormat)
         return TextureFormat_ARGB;
     case D3DFMT_X8R8G8B8:
         return TextureFormat_XRGB;
+    case D3DFMT_DXT1:
+        return TextureFormat_DXT1;
+    case D3DFMT_DXT2:
+        return TextureFormat_DXT2;
+    case D3DFMT_DXT3:
+        return TextureFormat_DXT3;
+    case D3DFMT_DXT4:
+        return TextureFormat_DXT4;
+    case D3DFMT_DXT5:
+        return TextureFormat_DXT5;
     }
 
     log(L"Unimplemented texture format: %d", d3dFormat);
