@@ -47,6 +47,12 @@ void SaveTexture(const wchar_t* name, size_t width, size_t height, TextureFormat
         wsprintf(filename, L"%s\\%s.tga", g_sharedData.saveFolder, name);
         WriteTGA(filename, width, height, format, pData, pitch);
     }
+    else if (format >= TextureFormat_DXT1
+        && format <= TextureFormat_DXT5)
+    {
+        wsprintf(filename, L"%s\\%s.dds", g_sharedData.saveFolder, name);
+        WriteDDS(filename, width, height, format, pData, pitch);
+    }
 }
 
 bool EnableModule(HookModule& hookModule)
