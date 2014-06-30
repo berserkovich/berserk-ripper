@@ -51,7 +51,7 @@ bool WriteTGA(const std::wstring& name, size_t width, size_t height, TextureForm
                                &FileDeleter);
     if (filePtr.get() == INVALID_HANDLE_VALUE)
     {
-        log(L"Failed to create file (%d)", GetLastError());
+        log(L"Failed to create file (%d, %s)", GetLastError(), name.c_str());
         return false;
     }
 
@@ -72,7 +72,7 @@ bool WriteTGA(const std::wstring& name, size_t width, size_t height, TextureForm
     DWORD bytesWritten = 0;
     if (!WriteFile(filePtr.get(), &header, sizeof(header), &bytesWritten, NULL))
     {
-        log(L"Write operation failed");
+        log(L"Write operation failed (%d, %s)", GetLastError(), name.c_str());
         return false;
     }
 
@@ -82,7 +82,7 @@ bool WriteTGA(const std::wstring& name, size_t width, size_t height, TextureForm
         bytesWritten = 0;
         if (!WriteFile(filePtr.get(), row, width * header.bpp / 8, &bytesWritten, NULL))
         {
-            log(L"Write operation failed");
+            log(L"Write operation failed (%d, %d, %dx%d, %s)", GetLastError(), i, width, height, name.c_str());
             return false;
         }
         row += pitch;
@@ -137,14 +137,14 @@ bool WriteDDS(const std::wstring& name, size_t width, size_t height, TextureForm
                                  &FileDeleter);
     if (filePtr.get() == INVALID_HANDLE_VALUE)
     {
-        log(L"Failed to create file (%d)", GetLastError());
+        log(L"Failed to create file (%d, %s)", GetLastError(), name.c_str());
         return false;
     }
 
     DWORD bytesWritten = 0;
     if (!WriteFile(filePtr.get(), &DDS_MAGIC, sizeof(DDS_MAGIC), &bytesWritten, NULL))
     {
-        log(L"Write operation failed");
+        log(L"Write operation failed (%d, %s)", GetLastError(), name.c_str());
         return false;
     }
 
@@ -161,18 +161,19 @@ bool WriteDDS(const std::wstring& name, size_t width, size_t height, TextureForm
     bytesWritten = 0;
     if (!WriteFile(filePtr.get(), &header, sizeof(header), &bytesWritten, NULL))
     {
-        log(L"Write operation failed");
+        log(L"Write operation failed (%d, %s)", GetLastError(), name.c_str());
         return false;
     }
 
     size_t normalizedPitch = (std::max)(1u, (width + 3) / 4) * ((format == TextureFormat_DXT1) ? 8 : 16);
+    size_t normalizedHeight = height / 4;
     uint8_t* row = static_cast<uint8_t*>(pData);
-    for (size_t i = 0; i < height; ++i)
+    for (size_t i = 0; i < normalizedHeight; ++i)
     {
         bytesWritten = 0;
         if (!WriteFile(filePtr.get(), row, normalizedPitch, &bytesWritten, NULL))
         {
-            log(L"Write operation failed");
+            log(L"Write operation failed (%d, %d, %dx%d(%d), %d, %s)", GetLastError(), i, width, height, normalizedHeight, format, name.c_str());
             return false;
         }
         row += pitch;

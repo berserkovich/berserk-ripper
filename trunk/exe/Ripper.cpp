@@ -70,6 +70,7 @@ bool RipperApp::Initialize()
     SharedData* sharedData = new (m_sharedMemPtr.get()) SharedData();
     UpdateD3D9Info(m_hInstance, &sharedData->d3d9DeviceOffsets);
     GetCurrentDirectory(260, sharedData->saveFolder);
+    wcscat_s(sharedData->saveFolder, L"\\captured");
 
     WNDCLASSEX wndClass = {};
     wndClass.cbSize = sizeof(wndClass);
@@ -222,7 +223,7 @@ bool RipperApp::InjectProcess(DWORD pid)
     DWORD currentDirLen = GetCurrentDirectory(0, NULL);
     std::vector<wchar_t> moduleFullPath(currentDirLen + wcslen(L"\\Ripper.dll"));
     GetCurrentDirectory(currentDirLen, &moduleFullPath[0]);
-    wcscat(&moduleFullPath[0], L"\\Ripper.dll");
+    wcscat_s(&moduleFullPath[0], moduleFullPath.size(), L"\\Ripper.dll");
     
     void* remoteModulePathBuffer = VirtualAllocEx(processPtr.get(), NULL, moduleFullPath.size() * sizeof(wchar_t), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!remoteModulePathBuffer)
