@@ -31,7 +31,12 @@ struct HookBase
 
 struct HookModule
 {
+    typedef void(*InitFunction)();
+    typedef void(*CleanupFunction)();
+
     const char* name;
+    InitFunction pfnInit;
+    CleanupFunction pfnCleanup;
     std::vector<HookBase*> hooks;
 };
 
@@ -84,8 +89,8 @@ struct HookFunction
 bool EnableModule(HookModule& hookModule);
 void DisableModule(HookModule& hookModule);
 
-#define DECLARE_HOOK_MODULE(moduleName)                                                  \
-    HookModule g_##moduleName##Hooks = { #moduleName }
+#define DECLARE_HOOK_MODULE(moduleName, initFunction, cleanupFunction)                   \
+    HookModule g_##moduleName##Hooks = { #moduleName, initFunction, cleanupFunction }
 
 #define USE_HOOK_MODULE(moduleName)                                                      \
     extern HookModule g_##moduleName##Hooks

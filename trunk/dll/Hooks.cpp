@@ -71,11 +71,25 @@ bool EnableModule(HookModule& hookModule)
         }
     }
 
-    return MH_EnableHook(MH_ALL_HOOKS) == MH_OK;
+    if (MH_EnableHook(MH_ALL_HOOKS) == MH_OK)
+    {
+        if (hookModule.pfnInit)
+        {
+            hookModule.pfnInit();
+        }
+        return true;
+    }
+
+    return false;
 }
 
 void DisableModule(HookModule& hookModule)
 {
+    if (hookModule.pfnCleanup)
+    {
+        hookModule.pfnCleanup();
+    }
+
     for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
     {
         (*it)->DisableHook();

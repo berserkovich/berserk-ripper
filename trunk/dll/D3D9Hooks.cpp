@@ -11,7 +11,10 @@
 
 #define MAX_TEXTURE_COUNT 8
 
-DECLARE_HOOK_MODULE(d3d9);
+void D3D9Init();
+void D3D9Cleanup();
+
+DECLARE_HOOK_MODULE(d3d9, &D3D9Init, &D3D9Cleanup);
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_Present, IDirect3DDevice9Present, g_sharedData.d3d9DeviceOffsets.Present, HRESULT, IDirect3DDevice9*, CONST RECT*, CONST RECT*, HWND, CONST RGNDATA*);
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_DIP, IDirect3DDevice9DIP, g_sharedData.d3d9DeviceOffsets.DrawIndexedPrimitive, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
 DECLARE_HOOK(d3d9, hIDirect3DDevice9_DIPUP, IDirect3DDevice9DIPUP, g_sharedData.d3d9DeviceOffsets.DrawIndexedPrimitiveUP, HRESULT, IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT, UINT, CONST void*, D3DFORMAT, CONST void*, UINT);
@@ -48,8 +51,11 @@ struct D3D9CaptureInfo
     bool isActive;
     size_t frameNumber;
     size_t drawCallNumber;
+    bool cleanup;
 };
 D3D9CaptureInfo g_d3d9CaptureInfo = {};
+
+HANDLE g_cleanupEvent = NULL;
 
 const float overlayQuad[] =
 {
@@ -114,21 +120,27 @@ void CreateOverlayTexture()
     }
 }
 
+void CleanupDeviceInfo()
+{
+    CComSafeRelease(g_deviceInfo.overlayTexture);
+    CComSafeRelease(g_deviceInfo.stateBlock);
+    g_deviceInfo.device = nullptr;
+}
+
 void UpdateDeviceInfo(IDirect3DDevice9* device)
 {
     assert(device);
 
-    CComSafeRelease(g_deviceInfo.overlayTexture);
-    CComSafeRelease(g_deviceInfo.stateBlock);
+    CleanupDeviceInfo();
 
-    IDirect3DDevice9Ex* pDeviceEx = NULL;
+    IDirect3DDevice9Ex* pDeviceEx = nullptr;
     IUnknown_QueryInterface(device, __uuidof(IDirect3DDevice9Ex), reinterpret_cast<void**>(&pDeviceEx));
-    g_deviceInfo.isExDevice = pDeviceEx != NULL;
+    g_deviceInfo.isExDevice = pDeviceEx != nullptr;
     CComSafeRelease(pDeviceEx);
    
     IDirect3DDevice9_GetDeviceCaps(device, &g_deviceInfo.caps);
     IDirect3DDevice9_GetCreationParameters(device, &g_deviceInfo.creationParams);
-    IDirect3DSurface9* pBackBuffer = NULL;
+    IDirect3DSurface9* pBackBuffer = nullptr;
     IDirect3DDevice9_GetBackBuffer(device, 0, 0, D3DBACKBUFFER_TYPE_MONO, &pBackBuffer);
     IDirect3DSurface9_GetDesc(pBackBuffer, &g_deviceInfo.backBufferDesc);
     CComSafeRelease(pBackBuffer);
@@ -275,6 +287,16 @@ HRESULT __stdcall Hooked_IDirect3DDevice9Present(IDirect3DDevice9* pThis, CONST 
 
     HRESULT hr = hIDirect3DDevice9_Present.m_real(pThis, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
 
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        if (g_d3d9CaptureInfo.cleanup)
+        {
+            CleanupDeviceInfo();
+            SetEvent(g_cleanupEvent);
+            return hr;
+        }
+    }
+
     if (g_inputHooks.IsCaptureActive())
     {
         std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
@@ -368,4 +390,20 @@ HRESULT __stdcall Hooked_IDirect3DDevice9Reset(IDirect3DDevice9* pThis, D3DPRESE
         UpdateDeviceInfo(pThis);
     }
     return hr;
+}
+
+void D3D9Init()
+{
+    g_cleanupEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+}
+
+void D3D9Cleanup()
+{
+    {
+        std::lock_guard<std::mutex> lock(g_d3d9CaptureInfo.lock);
+        g_d3d9CaptureInfo.cleanup = true;
+    }
+    WaitForSingleObject(g_cleanupEvent, INFINITE);
+    CloseHandle(g_cleanupEvent);
+    g_cleanupEvent = nullptr;
 }
