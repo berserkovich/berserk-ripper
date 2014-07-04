@@ -8,5 +8,8 @@ add_library(Ripper SHARED
             Hooks.h
             InputHooks.cpp
             InputHooks.h
-            D3D9Hooks.cpp)
+			D3D9Context.cpp
+			D3D9Context.h
+            D3D9Hooks.cpp
+			D3DHelpers.h)
 target_link_libraries(Ripper common minhook gdiplus)
