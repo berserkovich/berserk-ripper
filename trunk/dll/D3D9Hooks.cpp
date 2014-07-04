@@ -99,71 +99,71 @@ HRESULT __stdcall Hooked_IDirect3DDevice9Present(IDirect3DDevice9* pThis, CONST 
 
     //IDirect3DStateBlock9_Apply(g_deviceInfo.stateBlock);
 
-	g_d3d9Context->OnPresent(pThis);
+    g_d3d9Context->OnPresent(pThis);
 
     HRESULT hr = hIDirect3DDevice9_Present.m_real(pThis, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
 
-	g_d3d9Context->PostPresent();
+    g_d3d9Context->PostPresent();
 
     return hr;
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DIP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount)
 {
-	g_d3d9Context->OnDrawCall();
+    g_d3d9Context->OnDrawCall();
     return hIDirect3DDevice9_DIP.m_real(pThis, Type, BaseVertexIndex, MinIndex, NumVertices, StartIndex, PrimitiveCount);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DIPUP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, CONST void* pIndexData, D3DFORMAT IndexDataFormat, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-	g_d3d9Context->OnDrawCall();
-	return hIDirect3DDevice9_DIPUP.m_real(pThis, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
+    g_d3d9Context->OnDrawCall();
+    return hIDirect3DDevice9_DIPUP.m_real(pThis, PrimitiveType, MinVertexIndex, NumVertices, PrimitiveCount, pIndexData, IndexDataFormat, pVertexStreamZeroData, VertexStreamZeroStride);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE Type, UINT MinIndex, UINT NumVertices)
 {
-	g_d3d9Context->OnDrawCall();
-	return hIDirect3DDevice9_DP.m_real(pThis, Type, MinIndex, NumVertices);
+    g_d3d9Context->OnDrawCall();
+    return hIDirect3DDevice9_DP.m_real(pThis, Type, MinIndex, NumVertices);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DPUP(IDirect3DDevice9* pThis, D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
-	g_d3d9Context->OnDrawCall();
-	return hIDirect3DDevice9_DPUP.m_real(pThis, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
+    g_d3d9Context->OnDrawCall();
+    return hIDirect3DDevice9_DPUP.m_real(pThis, PrimitiveType, PrimitiveCount, pVertexStreamZeroData, VertexStreamZeroStride);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DrawRectPatch(IDirect3DDevice9* pThis, UINT Handle, CONST float* pNumSegs, CONST D3DRECTPATCH_INFO* pRectPatchInfo)
 {
-	g_d3d9Context->OnDrawCall();
-	return hIDirect3DDevice9_DrawRectPatch.m_real(pThis, Handle, pNumSegs, pRectPatchInfo);
+    g_d3d9Context->OnDrawCall();
+    return hIDirect3DDevice9_DrawRectPatch.m_real(pThis, Handle, pNumSegs, pRectPatchInfo);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9DrawTriPatch(IDirect3DDevice9* pThis, UINT Handle, CONST float* pNumSegs, CONST D3DTRIPATCH_INFO* pTriPatchInfo)
 {
-	g_d3d9Context->OnDrawCall();
-	return hIDirect3DDevice9_DrawTriPatch.m_real(pThis, Handle, pNumSegs, pTriPatchInfo);
+    g_d3d9Context->OnDrawCall();
+    return hIDirect3DDevice9_DrawTriPatch.m_real(pThis, Handle, pNumSegs, pTriPatchInfo);
 }
 
 HRESULT __stdcall Hooked_IDirect3DDevice9Reset(IDirect3DDevice9* pThis, D3DPRESENT_PARAMETERS* pPresentationParameters)
 {
     log(L"IDirect3DDevice9::Reset");
-	g_d3d9Context->CleanupDevice();
+    g_d3d9Context->CleanupDevice();
     HRESULT hr = hIDirect3DDevice9_Reset.m_real(pThis, pPresentationParameters);
     if (SUCCEEDED(hr))
     {
-		g_d3d9Context->SetDevice(pThis);
+        g_d3d9Context->SetDevice(pThis);
     }
     return hr;
 }
 
 void D3D9Init()
 {
-	g_d3d9Context = new D3D9Context();
+    g_d3d9Context = new D3D9Context();
 }
 
 void D3D9Cleanup()
 {
-	g_d3d9Context->RequestCleanup();
-	delete g_d3d9Context;
-	g_d3d9Context = nullptr;
+    g_d3d9Context->RequestCleanup();
+    delete g_d3d9Context;
+    g_d3d9Context = nullptr;
 }
