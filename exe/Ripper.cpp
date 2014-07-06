@@ -50,20 +50,20 @@ bool RipperApp::Initialize()
     m_sharedMutex.reset(CreateMutex(NULL, TRUE, SHARED_MUTEX_NAME));
     if (!m_sharedMutex)
     {
-        log(L"Failed to create mutex");
+        LOG("Failed to create mutex");
         return false;
     }
 
     if (GetLastError() == ERROR_ALREADY_EXISTS)
     {
-        log(L"Mutex is locked");
+        LOG("Mutex is locked");
         return false;
     }
 
     m_sharedMemPtr = CreateSharedMemory(FILE_MAPPING_OBJECT_NAME, sizeof(SharedData));
     if (!m_sharedMemPtr)
     {
-        log(L"Failed to create shared memory\n");
+        LOG("Failed to create shared memory\n");
         return false;
     }
 
@@ -97,7 +97,7 @@ int RipperApp::Run()
 {
     if (!m_wndPtr)
     {
-        log(L"Failed to create window\n");
+        LOG("Failed to create window\n");
         return 0;
     }
 
@@ -141,7 +141,7 @@ void RipperApp::CheckProcesses()
         CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0), &::CloseHandle);
     if (!pSnapshot)
     {
-        log(L"Failed to enumerate processes\n");
+        LOG("Failed to enumerate processes\n");
         return;
     }
 
@@ -150,7 +150,7 @@ void RipperApp::CheckProcesses()
 
     if (Process32First(pSnapshot.get(), &processInfo) == FALSE)
     {
-        log(L"Failed to enumerate processes\n");
+        LOG("Failed to enumerate processes\n");
         return;
     }
 
@@ -165,11 +165,11 @@ void RipperApp::CheckProcesses()
         {
             if (InjectProcess(processInfo.th32ProcessID))
             {
-                log(L"'%s' (%d) injected\n", processInfo.szExeFile, processInfo.th32ProcessID);
+                LOG("'%s' (%d) injected\n", WideCharToUtf8(processInfo.szExeFile).c_str(), processInfo.th32ProcessID);
             }
             else
             {
-                log(L"'%s' (%d) failed to inject\n", processInfo.szExeFile, processInfo.th32ProcessID);
+                LOG("'%s' (%d) failed to inject\n", WideCharToUtf8(processInfo.szExeFile).c_str(), processInfo.th32ProcessID);
             }
         }
     } while (Process32Next(pSnapshot.get(), &processInfo));

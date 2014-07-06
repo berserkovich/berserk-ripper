@@ -7,7 +7,7 @@
         HRESULT hr = (call);	\
         if(FAILED(hr))			\
         {						\
-            log(L"d3d call failed, hr = %d", hr); \
+            LOG("d3d call failed, hr = %d", hr); \
             return;				\
         }						\
     }
@@ -23,6 +23,7 @@ public:
     }
 
     com_ptr(ComType* object)
+        : m_object(nullptr)
     {
         reset(object);
     }
