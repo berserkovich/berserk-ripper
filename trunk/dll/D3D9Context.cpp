@@ -1,7 +1,6 @@
 #include "D3D9Context.h"
 
 #include "common/Common.h"
-#include "common/ImageWriter.h"
 
 #include "Hooks.h"
 #include "InputHooks.h"
@@ -34,7 +33,7 @@ TextureFormat ConvertD3D9TextureFormat(D3DFORMAT d3dFormat)
         return TextureFormat_DXT5;
     }
 
-    log(L"Unimplemented texture format: %d", d3dFormat);
+    LOG("Unimplemented texture format: %d", d3dFormat);
     return TextureFormat_Unknown;
 }
 
@@ -87,7 +86,7 @@ void D3D9Context::OnPresent(IDirect3DDevice9* device)
 
     if (m_isCaptureActive)
     {
-        log(L"IDirect3DDevice9::Present");
+        LOG("IDirect3DDevice9::Present");
         m_isCaptureActive = false;
         m_captureFrameNumber += 1;
         g_inputHooks.ResetCapture();
@@ -99,7 +98,7 @@ void D3D9Context::PostPresent()
     std::lock_guard<std::mutex> lock(m_lock);
     if (m_cleanup)
     {
-        CleanupDevice();
+        CleanupDevice_();
         SetEvent(m_cleanupEvent);
         return;
     }
@@ -129,7 +128,7 @@ void D3D9Context::SetDevice_(IDirect3DDevice9* device)
 
     if (!device)
     {
-        log(L"device is null");
+        LOG("device is null");
         return;
     }
 
@@ -204,20 +203,18 @@ void D3D9Context::CaptureTextures_()
             continue;
         }
 
-        wchar_t textureName[MAX_PATH];
-        wsprintf(textureName, L"texture_%d_%d", m_captureDrawCallNumber, i);
         D3DSURFACE_DESC desc = {};
         texture->GetLevelDesc(0, &desc);
         D3DLOCKED_RECT lockedRect = {};
         texture->LockRect(0, &lockedRect, NULL, D3DLOCK_READONLY);
         if (lockedRect.pBits)
         {
-            SaveTexture(textureName, desc.Width, desc.Height, ConvertD3D9TextureFormat(desc.Format), lockedRect.pBits, lockedRect.Pitch);
+            SaveTexture(desc.Width, desc.Height, ConvertD3D9TextureFormat(desc.Format), lockedRect.pBits, lockedRect.Pitch);
             texture->UnlockRect(0);
         }
         else
         {
-            log(L"Failed to lock texture");
+            LOG("Failed to lock texture");
         }
     }
 }

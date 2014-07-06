@@ -6,6 +6,8 @@ add_library(Ripper SHARED
             dllmain.cpp 
             Hooks.cpp
             Hooks.h
+            ImageCache.cpp
+            ImageCache.h
             InputHooks.cpp
             InputHooks.h
 			D3D9Context.cpp

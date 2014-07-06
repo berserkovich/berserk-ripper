@@ -26,8 +26,25 @@ struct SharedData
     wchar_t saveFolder[260];
 };
 
+enum TextureFormat
+{
+    TextureFormat_Unknown,
+    TextureFormat_ARGB,
+    TextureFormat_XRGB,
+    TextureFormat_DXT1,
+    TextureFormat_DXT2,
+    TextureFormat_DXT3,
+    TextureFormat_DXT4,
+    TextureFormat_DXT5
+};
+
 typedef std::unique_ptr<void, std::function<void(void*)>> unique_sharedmem_ptr;
 unique_sharedmem_ptr CreateSharedMemory(const wchar_t* name, size_t size);
 unique_sharedmem_ptr OpenSharedMemory(const wchar_t* name, size_t size);
 
-void log(const wchar_t* format, ...);
+std::wstring Utf8ToWideChar(const std::string& utf8String);
+std::string WideCharToUtf8(const std::wstring& wideString);
+
+void log(int line, const char* file, const char* format, ...);
+
+#define LOG(format, ...) log(__LINE__, __FILE__, format, __VA_ARGS__)

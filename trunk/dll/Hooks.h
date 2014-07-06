@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common/Common.h"
-#include "common/ImageWriter.h"
 #include "common/Platform.h"
 
 #include "MinHook.h"
@@ -12,7 +11,7 @@ extern SharedData g_sharedData;
 
 bool InitHooks();
 void RevertHooks();
-void SaveTexture(const wchar_t* name, size_t width, size_t height, TextureFormat format, void* pData, int pitch);
+void SaveTexture(size_t width, size_t height, TextureFormat format, void* pData, int pitch);
 
 struct HookBase
 {

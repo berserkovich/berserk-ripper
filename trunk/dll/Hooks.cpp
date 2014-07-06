@@ -1,8 +1,10 @@
 #include "Hooks.h"
 
+#include "ImageCache.h"
 #include "InputHooks.h"
 
 SharedData g_sharedData = {};
+ImageCache* g_imageCache = nullptr;
 
 USE_HOOK_MODULE(d3d9);
 
@@ -15,11 +17,13 @@ bool InitHooks()
     }
 
     g_sharedData = *reinterpret_cast<SharedData*>(sharedMemPtr.get());
+    g_imageCache = new ImageCache(WideCharToUtf8(g_sharedData.saveFolder));
 
     if (MH_Initialize() != MH_OK)
     {
         return false;
     }
+
 
     ENABLE_HOOK_MODULE(d3d9);
 
@@ -31,27 +35,24 @@ void RevertHooks()
     DISABLE_HOOK_MODULE(d3d9);
     g_inputHooks.RevertHooks();
     MH_Uninitialize();
+    delete g_imageCache;
 }
 
-void SaveTexture(const wchar_t* name, size_t width, size_t height, TextureFormat format, void* pData, int pitch)
+void SaveTexture(size_t width, size_t height, TextureFormat format, void* pData, int pitch)
 {
     if (format == TextureFormat_Unknown)
     {
         return;
     }
 
-    wchar_t filename[260];
     if (format == TextureFormat_ARGB
         || format == TextureFormat_XRGB)
     {
-        wsprintf(filename, L"%s\\%s.tga", g_sharedData.saveFolder, name);
-        WriteTGA(filename, width, height, format, pData, pitch);
     }
     else if (format >= TextureFormat_DXT1
         && format <= TextureFormat_DXT5)
     {
-        wsprintf(filename, L"%s\\%s.dds", g_sharedData.saveFolder, name);
-        WriteDDS(filename, width, height, format, pData, pitch);
+        g_imageCache->Add(width, height, format, pData, pitch);
     }
 }
 

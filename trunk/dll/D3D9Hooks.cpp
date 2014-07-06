@@ -146,7 +146,7 @@ HRESULT __stdcall Hooked_IDirect3DDevice9DrawTriPatch(IDirect3DDevice9* pThis, U
 
 HRESULT __stdcall Hooked_IDirect3DDevice9Reset(IDirect3DDevice9* pThis, D3DPRESENT_PARAMETERS* pPresentationParameters)
 {
-    log(L"IDirect3DDevice9::Reset");
+    LOG("IDirect3DDevice9::Reset");
     g_d3d9Context->CleanupDevice();
     HRESULT hr = hIDirect3DDevice9_Reset.m_real(pThis, pPresentationParameters);
     if (SUCCEEDED(hr))
