@@ -6,7 +6,9 @@
 #include <ddraw.h>
 
 #include <algorithm>
-#include <string>
+#include <iomanip>
+#include <iterator>
+#include <sstream>
 
 static const DWORD DDS_MAGIC = 0x20534444;
 
@@ -94,13 +96,14 @@ std::string ImageCache::ComputeHash_(const uint8_t* data, size_t length)
     MD5Update(&md5ctx, const_cast<unsigned char*>(data), length);
     MD5Final(hash, &md5ctx);
 
+    static const std::string hex_char = "0123456789ABCDEF";
     std::string hashString;
     hashString.reserve(32);
-    for (int i = 0; i < 16; ++i)
+    for (size_t i = 0; i < 16; ++i)
     {
-        hashString.append(std::to_string(hash[i]));
+        hashString.push_back(hex_char[(hash[i] >> 4) & 0x0F]);
+        hashString.push_back(hex_char[hash[i] & 0x0F]);
     }
-
     return hashString;
 }
 

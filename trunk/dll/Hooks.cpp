@@ -64,6 +64,11 @@ bool EnableModule(HookModule& hookModule)
         return true;
     }
 
+    if (hookModule.pfnInit)
+    {
+        hookModule.pfnInit();
+    }
+
     for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
     {
         if ((*it)->CreateHook(hModule) == false)
@@ -74,10 +79,6 @@ bool EnableModule(HookModule& hookModule)
 
     if (MH_EnableHook(MH_ALL_HOOKS) == MH_OK)
     {
-        if (hookModule.pfnInit)
-        {
-            hookModule.pfnInit();
-        }
         return true;
     }
 
@@ -86,11 +87,6 @@ bool EnableModule(HookModule& hookModule)
 
 void DisableModule(HookModule& hookModule)
 {
-    if (hookModule.pfnCleanup)
-    {
-        hookModule.pfnCleanup();
-    }
-
     for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
     {
         (*it)->DisableHook();
@@ -101,5 +97,10 @@ void DisableModule(HookModule& hookModule)
     for (auto it = hookModule.hooks.begin(), it_end = hookModule.hooks.end(); it != it_end; ++it)
     {
         (*it)->RemoveHook();
+    }
+
+    if (hookModule.pfnCleanup)
+    {
+        hookModule.pfnCleanup();
     }
 }
