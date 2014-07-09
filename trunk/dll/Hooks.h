@@ -3,6 +3,7 @@
 #include "common/Common.h"
 #include "common/Platform.h"
 
+#include "ImageCache.h"
 #include "MinHook.h"
 
 #include <vector>
@@ -11,7 +12,7 @@ extern SharedData g_sharedData;
 
 bool InitHooks();
 void RevertHooks();
-void SaveTexture(size_t width, size_t height, TextureFormat format, void* pData, int pitch);
+void SaveTexture(size_t width, size_t height, D3DFORMAT format, void* pData, int pitch);
 
 struct HookBase
 {

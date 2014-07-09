@@ -1,5 +1,7 @@
 #include "InputHooks.h"
 
+#include "common/Common.h"
+
 InputHooks g_inputHooks;
 
 LRESULT WINAPI HookedWndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
@@ -67,11 +69,14 @@ LRESULT InputHooks::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
         return DefWindowProc(hWnd, Msg, wParam, lParam);
     }
 
-    if (GetAsyncKeyState(VK_NUMPAD0) != 0)
+    if (Msg == WM_KEYDOWN || Msg == WM_SYSKEYDOWN || Msg == WM_INPUT)
     {
-        OutputDebugString(L"Capture active");
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_captureActive = true;
+        if (!m_captureActive && (GetAsyncKeyState(VK_NUMPAD0) != 0))
+        {
+            LOG("Capture active");
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_captureActive = true;
+        }
     }
 
     return CallWindowProc(thisWndProc, thisHwnd, Msg, wParam, lParam);
