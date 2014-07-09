@@ -26,18 +26,6 @@ struct SharedData
     wchar_t saveFolder[260];
 };
 
-enum TextureFormat
-{
-    TextureFormat_Unknown,
-    TextureFormat_ARGB,
-    TextureFormat_XRGB,
-    TextureFormat_DXT1,
-    TextureFormat_DXT2,
-    TextureFormat_DXT3,
-    TextureFormat_DXT4,
-    TextureFormat_DXT5
-};
-
 typedef std::unique_ptr<void, std::function<void(void*)>> unique_sharedmem_ptr;
 unique_sharedmem_ptr CreateSharedMemory(const wchar_t* name, size_t size);
 unique_sharedmem_ptr OpenSharedMemory(const wchar_t* name, size_t size);

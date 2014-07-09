@@ -1,6 +1,5 @@
 #include "Hooks.h"
 
-#include "ImageCache.h"
 #include "InputHooks.h"
 
 SharedData g_sharedData = {};
@@ -38,22 +37,14 @@ void RevertHooks()
     delete g_imageCache;
 }
 
-void SaveTexture(size_t width, size_t height, TextureFormat format, void* pData, int pitch)
+void SaveTexture(size_t width, size_t height, D3DFORMAT format, void* pData, int pitch)
 {
-    if (format == TextureFormat_Unknown)
+    if (format == D3DFMT_UNKNOWN)
     {
         return;
     }
 
-    if (format == TextureFormat_ARGB
-        || format == TextureFormat_XRGB)
-    {
-    }
-    else if (format >= TextureFormat_DXT1
-        && format <= TextureFormat_DXT5)
-    {
-        g_imageCache->Add(width, height, format, pData, pitch);
-    }
+    g_imageCache->Add(width, height, format, pData, pitch);
 }
 
 bool EnableModule(HookModule& hookModule)

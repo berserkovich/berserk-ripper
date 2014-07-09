@@ -5,6 +5,8 @@
 #include "Hooks.h"
 #include "InputHooks.h"
 
+#include <dxgiformat.h>
+
 const float overlayQuad[] =
 {
     0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
@@ -12,30 +14,6 @@ const float overlayQuad[] =
     64.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,
     64.0f, 64.0f, 0.0f, 1.0f, 1.0f, 1.0f,
 };
-
-TextureFormat ConvertD3D9TextureFormat(D3DFORMAT d3dFormat)
-{
-    switch (d3dFormat)
-    {
-    case D3DFMT_A8R8G8B8:
-        return TextureFormat_ARGB;
-    case D3DFMT_X8R8G8B8:
-        return TextureFormat_XRGB;
-    case D3DFMT_DXT1:
-        return TextureFormat_DXT1;
-    case D3DFMT_DXT2:
-        return TextureFormat_DXT2;
-    case D3DFMT_DXT3:
-        return TextureFormat_DXT3;
-    case D3DFMT_DXT4:
-        return TextureFormat_DXT4;
-    case D3DFMT_DXT5:
-        return TextureFormat_DXT5;
-    }
-
-    LOG("Unimplemented texture format: %d", d3dFormat);
-    return TextureFormat_Unknown;
-}
 
 D3D9Context::D3D9Context()
     : m_device(nullptr)
@@ -209,7 +187,7 @@ void D3D9Context::CaptureTextures_()
         texture->LockRect(0, &lockedRect, NULL, D3DLOCK_READONLY);
         if (lockedRect.pBits)
         {
-            SaveTexture(desc.Width, desc.Height, ConvertD3D9TextureFormat(desc.Format), lockedRect.pBits, lockedRect.Pitch);
+            SaveTexture(desc.Width, desc.Height, desc.Format, lockedRect.pBits, lockedRect.Pitch);
             texture->UnlockRect(0);
         }
         else

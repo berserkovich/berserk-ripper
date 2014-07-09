@@ -163,7 +163,7 @@ void D3D9Init()
 
 void D3D9Cleanup()
 {
-    g_d3d9Context->RequestCleanup();
+    g_d3d9Context->CleanupDevice();
     delete g_d3d9Context;
     g_d3d9Context = nullptr;
 }
