@@ -4,27 +4,33 @@
 #include <fstream>
 
 template <typename T>
-void WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& file, D3DPRIMITIVETYPE primitiveType)
+size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& file, D3DPRIMITIVETYPE primitiveType)
 {
+    size_t trianglesWritten = 0;
     if (primitiveType == D3DPT_TRIANGLELIST)
     {
         for (size_t i = 0; i < numIndicies; ++i)
         {
             file << indexData[i] << ' ';
         }
+        trianglesWritten = numIndicies / 3;
     }
     else if (primitiveType == D3DPT_TRIANGLESTRIP)
     {
         // 0 1 2  1 3 2  2 3 4  3 5 4 ...
         assert(numIndicies >= 3);
-        file << indexData[0] << ' ';
-        file << indexData[1] << ' ';
-        file << indexData[2] << ' ';
-        for (size_t i = 3; i < numIndicies; ++i)
+        for (size_t i = 2; i < numIndicies; ++i)
         {
-            file << indexData[i - 2] << ' ';
-            file << indexData[i - 1 + i % 2] << ' ';
-            file << indexData[i - i % 2] << ' ';
+            T idx1 = indexData[i - 2];
+            T idx2 = indexData[i - 1 + i % 2];
+            T idx3 = indexData[i - i % 2];
+            if ((idx1 == idx2) && (idx1 == idx3))
+            {
+                // degenerate triangle
+                continue;
+            }
+            file << idx1 << ' ' << idx2 << ' ' << idx3 << ' ';
+            ++trianglesWritten;
         }
     }
     else if (primitiveType == D3DPT_TRIANGLEFAN)
@@ -35,12 +41,14 @@ void WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& file,
             file << indexData[i] << ' ';
             file << indexData[i + 1] << ' ';
             file << indexData[0];
+            ++trianglesWritten;
         }
     }
     else
     {
         LOG("Unsupported primitive type");
     }
+    return trianglesWritten;
 }
 
 
@@ -81,6 +89,7 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
 
     std::string filename = m_saveFolder + "\\primitive_" + std::to_string(count) + ".dae";
     file.open(filename, std::ios_base::out | std::ios_base::binary);
+    file.precision(10);
 
     std::string meshName = "mesh_" + std::to_string(count);
     std::string primitiveName = "????";
@@ -189,22 +198,17 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     file << "    <" << primitiveName << " material=\"default\" count=\"" << primitiveCount << "\">\n";
     file << "     <input semantic=\"VERTEX\" source=\"#" << meshName << "-vertices\" offset = \"0\"/>\n";
     file << "     <input semantic=\"NORMAL\" source=\"#" << meshName << "-normals\" offset = \"0\"/>\n";
-    file << "     <vcount>";
-    for (size_t i = 0; i < primitiveCount; ++i)
-    {
-        file << "3 ";
-    }
-    file << "</vcount>\n";
     file << "     <p>";
+    size_t trianglesWritten = 0;
     if (indexFormat == D3DFMT_INDEX16)
     {
         const uint16_t* indexData = reinterpret_cast<const uint16_t*>(indicies);
-        WriteIndicies_(indexData, numIndicies, file, primitiveType);
+        trianglesWritten = WriteIndicies_(indexData, numIndicies, file, primitiveType);
     }
     else if (indexFormat == D3DFMT_INDEX32)
     {
         const uint32_t* indexData = reinterpret_cast<const uint32_t*>(indicies);
-        WriteIndicies_(indexData, numIndicies, file, primitiveType);
+        trianglesWritten = WriteIndicies_(indexData, numIndicies, file, primitiveType);
     }
     else
     {
@@ -212,6 +216,14 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     }
 
     file << "</p>\n";
+
+    file << "     <vcount>";
+    for (size_t i = 0; i < trianglesWritten; ++i)
+    {
+        file << "3 ";
+    }
+    file << "</vcount>\n";
+
     file << "    </" << primitiveName << ">\n";
 
 
