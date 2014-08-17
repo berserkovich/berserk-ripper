@@ -15,10 +15,31 @@ const float overlayQuad[] =
     64.0f, 64.0f, 0.0f, 1.0f, 1.0f, 1.0f,
 };
 
+size_t PrimitiveCountToNumElemtns(D3DPRIMITIVETYPE PrimitiveType, size_t primitiveCount)
+{
+    switch (PrimitiveType)
+    {
+    case D3DPT_POINTLIST:
+        return primitiveCount;
+    case D3DPT_LINELIST:
+        return primitiveCount * 2;
+    case D3DPT_LINESTRIP:
+        return primitiveCount + 1;
+    case D3DPT_TRIANGLELIST:
+        return primitiveCount * 3;
+    case D3DPT_TRIANGLESTRIP:
+    case D3DPT_TRIANGLEFAN:
+        return primitiveCount + 2;
+    }
+
+    return 0;
+}
+
 D3D9Context::D3D9Context()
     : m_device(nullptr)
     , m_isExDevice(false)
     , m_overlayTexture(nullptr)
+    , m_exporter(WideCharToUtf8(g_sharedData.saveFolder))
     , m_isCaptureActive(false)
     , m_captureFrameNumber(0)
     , m_captureDrawCallNumber(0)
@@ -88,13 +109,92 @@ void D3D9Context::PostPresent()
     }
 }
 
-void D3D9Context::OnDrawCall()
+void D3D9Context::OnDrawIndexedPrimitive(D3DPRIMITIVETYPE Type, INT BaseVertexIndex, UINT MinIndex, UINT NumVertices, UINT StartIndex, UINT PrimitiveCount)
+{
+    std::lock_guard<std::mutex> lock(m_lock);
+    if (m_isCaptureActive)
+    {
+        CaptureTextures_();
+
+        size_t numElements = PrimitiveCountToNumElemtns(Type, PrimitiveCount);
+        D3DVERTEXELEMENT9 vertexElements[MAXD3DDECLLENGTH + 1] = {};
+        UINT numVertexElements = 0;
+        uint8_t* indicies = nullptr;
+        uint8_t* vertices = nullptr;
+        UINT verticesOffset = 0;
+        UINT verticesStride = 0;
+        D3DINDEXBUFFER_DESC indexBufferDesc = {};
+
+        com_ptr<IDirect3DIndexBuffer9> indexBuffer;
+        com_ptr<IDirect3DVertexBuffer9> vertexBuffer;
+        com_ptr<IDirect3DVertexDeclaration9> vertexDeclaration;
+
+        D3DCALL(m_device->GetIndices(&indexBuffer));
+        D3DCALL(indexBuffer->Lock(StartIndex, numElements, reinterpret_cast<void**>(&indicies), D3DLOCK_READONLY));
+        D3DCALL(indexBuffer->GetDesc(&indexBufferDesc));
+        D3DCALL(m_device->GetStreamSource(0, &vertexBuffer, &verticesOffset, &verticesStride));
+        D3DCALL(vertexBuffer->Lock(verticesOffset + MinIndex + BaseVertexIndex, NumVertices, reinterpret_cast<void**>(&vertices), D3DLOCK_READONLY));
+        D3DCALL(m_device->GetVertexDeclaration(&vertexDeclaration));
+        D3DCALL(vertexDeclaration->GetDeclaration(vertexElements, &numVertexElements));
+
+        m_exporter.AddPrimitive(Type, vertices, NumVertices, vertexElements, verticesStride, indicies, numElements, indexBufferDesc.Format, PrimitiveCount);
+
+        D3DCALL(vertexBuffer->Unlock());
+        D3DCALL(indexBuffer->Unlock());
+
+        m_captureDrawCallNumber += 1;
+    }
+}
+
+void D3D9Context::OnDrawIndexedPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT MinVertexIndex, UINT NumVertices, UINT PrimitiveCount, CONST void* pIndexData, D3DFORMAT IndexDataFormat, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
 {
     std::lock_guard<std::mutex> lock(m_lock);
     if (m_isCaptureActive)
     {
         CaptureTextures_();
         m_captureDrawCallNumber += 1;
+    }
+}
+
+void D3D9Context::OnDrawPrimitive(D3DPRIMITIVETYPE Type, UINT MinIndex, UINT NumVertices)
+{
+    std::lock_guard<std::mutex> lock(m_lock);
+    if (m_isCaptureActive)
+    {
+        CaptureTextures_();
+        m_captureDrawCallNumber += 1;
+    }
+}
+
+void D3D9Context::OnDrawPrimitiveUP(D3DPRIMITIVETYPE PrimitiveType, UINT PrimitiveCount, CONST void* pVertexStreamZeroData, UINT VertexStreamZeroStride)
+{
+    std::lock_guard<std::mutex> lock(m_lock);
+    if (m_isCaptureActive)
+    {
+        CaptureTextures_();
+        m_captureDrawCallNumber += 1;
+    }
+}
+
+void D3D9Context::OnDrawRectPatch()
+{
+    std::lock_guard<std::mutex> lock(m_lock);
+    if (m_isCaptureActive)
+    {
+        CaptureTextures_();
+        m_captureDrawCallNumber += 1;
+        LOG("IDirect3DDevice9::DrawRectPatch not implemented");
+    }
+}
+
+void D3D9Context::OnDrawTriPatch()
+{
+    std::lock_guard<std::mutex> lock(m_lock);
+    if (m_isCaptureActive)
+    {
+        CaptureTextures_();
+        m_captureDrawCallNumber += 1;
+        LOG("IDirect3DDevice9::DrawTriPatch not implemented");
     }
 }
 
@@ -187,7 +287,7 @@ void D3D9Context::CaptureTextures_()
         texture->LockRect(0, &lockedRect, NULL, D3DLOCK_READONLY);
         if (lockedRect.pBits)
         {
-            SaveTexture(desc.Width, desc.Height, desc.Format, lockedRect.pBits, lockedRect.Pitch);
+            m_exporter.SetTexture(i, desc.Width, desc.Height, desc.Format, lockedRect.pBits, lockedRect.Pitch);
             texture->UnlockRect(0);
         }
         else

@@ -3,7 +3,6 @@
 #include "InputHooks.h"
 
 SharedData g_sharedData = {};
-ImageCache* g_imageCache = nullptr;
 
 USE_HOOK_MODULE(d3d9);
 
@@ -16,7 +15,6 @@ bool InitHooks()
     }
 
     g_sharedData = *reinterpret_cast<SharedData*>(sharedMemPtr.get());
-    g_imageCache = new ImageCache(WideCharToUtf8(g_sharedData.saveFolder));
 
     if (MH_Initialize() != MH_OK)
     {
@@ -34,17 +32,6 @@ void RevertHooks()
     DISABLE_HOOK_MODULE(d3d9);
     g_inputHooks.RevertHooks();
     MH_Uninitialize();
-    delete g_imageCache;
-}
-
-void SaveTexture(size_t width, size_t height, D3DFORMAT format, void* pData, int pitch)
-{
-    if (format == D3DFMT_UNKNOWN)
-    {
-        return;
-    }
-
-    g_imageCache->Add(width, height, format, pData, pitch);
 }
 
 bool EnableModule(HookModule& hookModule)
