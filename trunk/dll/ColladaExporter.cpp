@@ -102,7 +102,7 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
             LOG("Invalid indicies count");
             return;
         }
-        primitiveName = "polylist";
+        primitiveName = "triangles";
     }
     else
     {
@@ -217,12 +217,12 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
 
     file << "</p>\n";
 
-    file << "     <vcount>";
-    for (size_t i = 0; i < trianglesWritten; ++i)
-    {
-        file << "3 ";
-    }
-    file << "</vcount>\n";
+    //file << "     <vcount>";
+    //for (size_t i = 0; i < trianglesWritten; ++i)
+    //{
+    //    file << "3 ";
+    //}
+    //file << "</vcount>\n";
 
     file << "    </" << primitiveName << ">\n";
 
