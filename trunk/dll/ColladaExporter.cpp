@@ -24,7 +24,7 @@ size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& fil
             T idx1 = indexData[i - 2];
             T idx2 = indexData[i - 1 + i % 2];
             T idx3 = indexData[i - i % 2];
-            if ((idx1 == idx2) && (idx1 == idx3))
+            if ((idx1 == idx2) || (idx1 == idx3) || (idx2 == idx3))
             {
                 // degenerate triangle
                 continue;
@@ -140,7 +140,7 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
                 for (size_t i = 0; i < numVertices; ++i)
                 {
                     file << ' ' << positionData[0] << ' ' << positionData[1] << ' ' << positionData[2] << ' ';
-                    positionData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(positionData) + stride + vertexDeclaration->Offset);
+                    positionData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(positionData) + stride);
                 }
                 file << "</float_array>\n";
                 file << "     <technique_common>\n";
@@ -168,7 +168,7 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
                 for (size_t i = 0; i < numVertices; ++i)
                 {
                     file << ' ' << normalData[0] << ' ' << normalData[1] << ' ' << normalData[2] << ' ';
-                    normalData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(normalData)+stride + vertexDeclaration->Offset);
+                    normalData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(normalData) + stride);
                 }
                 file << "</float_array>\n";
                 file << "     <technique_common>\n";
