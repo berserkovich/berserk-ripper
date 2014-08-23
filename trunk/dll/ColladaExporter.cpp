@@ -2,6 +2,35 @@
 
 #include <cassert>
 #include <fstream>
+#include <vector>
+
+struct VertexDeclarationInfo
+{
+    std::string semanticName_;
+    size_t defaultSize_;
+
+    VertexDeclarationInfo(std::string&& semanticName, size_t defaultSize)
+        : semanticName_(std::move(semanticName))
+        , defaultSize_(defaultSize)
+    {
+    }
+};
+
+std::map<BYTE, VertexDeclarationInfo> s_vertexDeclarationInfoMap;
+
+struct VertexComponentData
+{
+    const uint8_t* data_;
+    size_t size_;
+
+    VertexComponentData(const uint8_t* data, size_t size)
+        : data_(data)
+        , size_(size)
+    {
+    }
+};
+
+typedef std::map<std::string, std::vector<VertexComponentData>> VertexDataMap;
 
 template <typename T>
 size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& file, D3DPRIMITIVETYPE primitiveType)
@@ -51,12 +80,63 @@ size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& fil
     return trianglesWritten;
 }
 
+void WriteComponent_(std::ofstream& file, const uint8_t* data, size_t numVertices, const std::string& meshName, const std::string& componentName, size_t componentSize, size_t stride)
+{
+    file << "    <source id='" << meshName << "-" << componentName << "'>\n";
+
+    const float* componentData = reinterpret_cast<const float*>(data);
+    file << "     <float_array id='" << meshName << "-" << componentName << "-array' count='" << numVertices * componentSize << "'>";
+    for (size_t i = 0; i < numVertices; ++i)
+    {
+        for (size_t j = 0; j < componentSize; ++j)
+        {
+            file << componentData[j] << ' ';
+        }
+        file << ' ';
+        componentData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(componentData) + stride);
+    }
+    file << "</float_array>\n";
+    file << "     <technique_common>\n";
+    file << "      <accessor source = '#" << meshName << "-" << componentName << "-array' count='" << numVertices << "' stride='" << componentSize << "'>\n";
+    for (size_t i = 0; i < componentSize; ++i)
+    {
+        file << "       <param name='" << char('X' + i) << "' type='float'/>\n";
+    }
+    file << "      </accessor>\n";
+    file << "     </technique_common>\n";
+    file << "    </source>\n";
+}
+
+size_t GetComponentSize_(BYTE usage, BYTE type, size_t defaultSize)
+{
+    switch (type)
+    {
+    case D3DDECLTYPE_FLOAT1:
+        return 1;
+    case D3DDECLTYPE_FLOAT2:
+        return 2;
+    case D3DDECLTYPE_FLOAT3:
+        return 3;
+    case D3DDECLTYPE_UNUSED:
+        return defaultSize;
+    }
+
+    return 0;
+}
+
 
 ColladaExporter::ColladaExporter(const std::string& saveFolder)
     : m_saveFolder(saveFolder)
     , m_imageCache(saveFolder)
 {
-
+    static bool vertexDeclarationInit = false;
+    if (!vertexDeclarationInit)
+    {
+        s_vertexDeclarationInfoMap.insert(std::make_pair(D3DDECLUSAGE_POSITION, VertexDeclarationInfo(std::string("POSITION"), 3)));
+        s_vertexDeclarationInfoMap.insert(std::make_pair(D3DDECLUSAGE_NORMAL, VertexDeclarationInfo(std::string("NORMAL"), 3)));
+        s_vertexDeclarationInfoMap.insert(std::make_pair(D3DDECLUSAGE_TEXCOORD, VertexDeclarationInfo(std::string("TEXCOORD"), 2)));
+        vertexDeclarationInit = true;
+    }
 }
 
 ColladaExporter::~ColladaExporter()
@@ -119,6 +199,8 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     file << "  <geometry id='" << meshName << "' name='" << meshName << "'>\n";
     file << "   <mesh>\n";
 
+    VertexDataMap vertexDataMap;
+
     while (vertexDeclaration->Stream != 0xFF)
     {
         D3DVERTEXELEMENT9* element = vertexDeclaration++;
@@ -129,75 +211,63 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
             continue;
         }
 
-        if (vertexDeclaration->Usage == D3DDECLUSAGE_POSITION)
-        {
-            file << "    <source id=\"" << meshName << "-positions\" name=\"position\">\n";
-            if (vertexDeclaration->Type == D3DDECLTYPE_FLOAT3
-                || vertexDeclaration->Type == D3DDECLTYPE_UNUSED)
-            {
-                const float* positionData = reinterpret_cast<const float*>(vertices + vertexDeclaration->Offset);
-                file << "     <float_array id=\"" << meshName << "-position-data\" count=\"" << numVertices * 3 << "\">";
-                for (size_t i = 0; i < numVertices; ++i)
-                {
-                    file << ' ' << positionData[0] << ' ' << positionData[1] << ' ' << positionData[2] << ' ';
-                    positionData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(positionData) + stride);
-                }
-                file << "</float_array>\n";
-                file << "     <technique_common>\n";
-                file << "      <accessor source = \"#" << meshName << "-position-data\" count=\"" << numVertices << "\" stride=\"" << 3 << "\">\n";
-                file << "       <param name=\"X\" type=\"float\"/>\n";
-                file << "       <param name=\"Y\" type=\"float\"/>\n";
-                file << "       <param name=\"Z\" type=\"float\"/>\n";
-                file << "      </accessor>\n";
-                file << "     </technique_common>\n";
-                file << "    </source>\n";
-            }
-            else
-            {
-                LOG("Unsupported type %d", vertexDeclaration->Type);
-            }
-        }
-        else if (vertexDeclaration->Usage == D3DDECLUSAGE_NORMAL)
-        {
-            file << "    <source id=\"" << meshName << "-normals\" name=\"normal\">\n";
-            if (vertexDeclaration->Type == D3DDECLTYPE_FLOAT3
-                || vertexDeclaration->Type == D3DDECLTYPE_UNUSED)
-            {
-                const float* normalData = reinterpret_cast<const float*>(vertices + vertexDeclaration->Offset);
-                file << "     <float_array id=\"" << meshName << "-normal-data\" count=\"" << numVertices * 3 << "\">";
-                for (size_t i = 0; i < numVertices; ++i)
-                {
-                    file << ' ' << normalData[0] << ' ' << normalData[1] << ' ' << normalData[2] << ' ';
-                    normalData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(normalData) + stride);
-                }
-                file << "</float_array>\n";
-                file << "     <technique_common>\n";
-                file << "      <accessor source = \"#" << meshName << "-normal-data\" count=\"" << numVertices << "\" stride=\"" << 3 << "\">\n";
-                file << "       <param name=\"X\" type=\"float\"/>\n";
-                file << "       <param name=\"Y\" type=\"float\"/>\n";
-                file << "       <param name=\"Z\" type=\"float\"/>\n";
-                file << "      </accessor>\n";
-                file << "     </technique_common>\n";
-                file << "    </source>\n";
-            }
-            else
-            {
-                LOG("Unsupported type %d", vertexDeclaration->Type);
-            }
-        }
-        else
+        auto it_find = s_vertexDeclarationInfoMap.find(vertexDeclaration->Usage);
+        if (it_find == s_vertexDeclarationInfoMap.end())
         {
             LOG("Unsupported type %d method  %d", vertexDeclaration->Type, vertexDeclaration->Method);
+            continue;
+        }
+
+        size_t componentSize = GetComponentSize_(vertexDeclaration->Usage, vertexDeclaration->Type, it_find->second.defaultSize_);
+        if (componentSize == 0)
+        {
+            LOG("Unsupported type %d method  %d", vertexDeclaration->Type, vertexDeclaration->Method);
+            continue;
+        }
+
+        vertexDataMap[it_find->second.semanticName_].emplace_back(vertices + vertexDeclaration->Offset, componentSize);
+    }
+
+    for (auto& components : vertexDataMap)
+    {
+        for (size_t i = 0; i < components.second.size(); ++i)
+        {
+            VertexComponentData& vertexData = components.second[i];
+            WriteComponent_(file, vertexData.data_, numVertices, meshName, components.first + std::to_string(i), vertexData.size_, stride);
         }
     }
 
-    file << "    <vertices id=\"" << meshName << "-vertices\">\n";
-    file << "     <input semantic=\"POSITION\" source=\"#" << meshName << "-positions\"/>\n";
-    file << "    </vertices>\n";
 
-    file << "    <" << primitiveName << " material=\"default\" count=\"" << primitiveCount << "\">\n";
-    file << "     <input semantic=\"VERTEX\" source=\"#" << meshName << "-vertices\" offset = \"0\"/>\n";
-    file << "     <input semantic=\"NORMAL\" source=\"#" << meshName << "-normals\" offset = \"0\"/>\n";
+    auto it_find = vertexDataMap.find("POSITION");
+    if (it_find != vertexDataMap.end())
+    {
+        file << "    <vertices id='" << meshName << "-VERTEX'>\n";
+        file << "     <input semantic='POSITION' source='#" << meshName << "-POSITION0'/>\n";
+        file << "    </vertices>\n";
+    }
+
+
+    file << "    <" << primitiveName << " count='" << primitiveCount << "'>\n";
+
+    if (it_find != vertexDataMap.end())
+    {
+        file << "     <input semantic='VERTEX' source='#" << meshName << "-VERTEX' offset = '0'/>\n";
+    }
+
+    for (auto& components : vertexDataMap)
+    {
+        if (components.first == "POSITION")
+        {
+            continue;
+        }
+
+        for (size_t i = 0; i < components.second.size(); ++i)
+        {
+            VertexComponentData& vertexData = components.second[i];
+            file << "     <input semantic='" << components.first << "' source='#" << meshName << "-" << components.first + std::to_string(i) << "' offset = '0'/>\n";
+        }
+    }
+
     file << "     <p>";
     size_t trianglesWritten = 0;
     if (indexFormat == D3DFMT_INDEX16)
@@ -231,14 +301,14 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     file << "  </geometry>\n";
     file << " </library_geometries>\n";
     file << " <library_visual_scenes>\n";
-    file << "  <visual_scene id=\"VisualSceneNode\" name=\"" << meshName << "\">\n";
-    file << "   <node id=\"" << meshName << "-node\" name=\"" << meshName << "\" type=\"NODE\">\n";
-    file << "    <instance_geometry url=\"#" << meshName << "\"/>\n";
+    file << "  <visual_scene id='VisualSceneNode' name='" << meshName << "'>\n";
+    file << "   <node id='" << meshName << "-node' name='" << meshName << "' type='NODE'>\n";
+    file << "    <instance_geometry url='#" << meshName << "'/>\n";
     file << "   </node>\n";
     file << "  </visual_scene>\n";
     file << " </library_visual_scenes>\n";
     file << " <scene>\n";
-    file << "  <instance_visual_scene url=\"#VisualSceneNode\"/>\n";
+    file << "  <instance_visual_scene url='#VisualSceneNode'/>\n";
     file << " </scene>\n";
     file << "</COLLADA>\n";
 
