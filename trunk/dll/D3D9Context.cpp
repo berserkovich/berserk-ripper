@@ -271,7 +271,7 @@ void D3D9Context::CaptureTextures_()
         m_device->GetTexture(i, &srcTextures[i]);
         if (!srcTextures[i])
         {
-            return;
+            continue;
         }
 
         com_ptr<IDirect3DTexture9> texture = nullptr;

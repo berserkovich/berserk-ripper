@@ -2,6 +2,8 @@
 
 #include "ImageCache.h"
 
+#include <vector>
+
 class ColladaExporter
 {
 public:
@@ -24,4 +26,6 @@ public:
 private:
     std::string m_saveFolder;
     ImageCache m_imageCache;
+    std::vector<std::string> m_textures;
+    size_t m_primitiveNumber;
 };

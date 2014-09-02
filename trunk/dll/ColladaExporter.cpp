@@ -1,8 +1,9 @@
 #include "ColladaExporter.h"
 
+#include "D3DHelpers.h"
+
 #include <cassert>
 #include <fstream>
-#include <vector>
 
 struct VertexDeclarationInfo
 {
@@ -128,6 +129,7 @@ size_t GetComponentSize_(BYTE usage, BYTE type, size_t defaultSize)
 ColladaExporter::ColladaExporter(const std::string& saveFolder)
     : m_saveFolder(saveFolder)
     , m_imageCache(saveFolder)
+    , m_primitiveNumber(0)
 {
     static bool vertexDeclarationInit = false;
     if (!vertexDeclarationInit)
@@ -137,6 +139,8 @@ ColladaExporter::ColladaExporter(const std::string& saveFolder)
         s_vertexDeclarationInfoMap.insert(std::make_pair(D3DDECLUSAGE_TEXCOORD, VertexDeclarationInfo(std::string("TEXCOORD"), 2)));
         vertexDeclarationInit = true;
     }
+
+    m_textures.reserve(MAX_TEXTURE_COUNT);
 }
 
 ColladaExporter::~ColladaExporter()
@@ -146,12 +150,12 @@ ColladaExporter::~ColladaExporter()
 
 void ColladaExporter::StartScene()
 {
-
+    m_primitiveNumber = 0;
 }
 
 void ColladaExporter::SetTexture(size_t stage, size_t width, size_t height, D3DFORMAT format, void* pData, int pitch)
 {
-    m_imageCache.Add(width, height, format, pData, pitch);
+    m_textures.push_back(m_imageCache.Add(width, height, format, pData, pitch));
 }
 
 void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType, 
@@ -164,14 +168,13 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
                                     D3DFORMAT indexFormat, 
                                     size_t primitiveCount)
 {
-    static int count = 0;
     std::ofstream file;
 
-    std::string filename = m_saveFolder + "\\primitive_" + std::to_string(count) + ".dae";
+    std::string filename = m_saveFolder + "\\primitive_" + std::to_string(m_primitiveNumber) + ".dae";
     file.open(filename, std::ios_base::out | std::ios_base::binary);
     file.precision(10);
 
-    std::string meshName = "mesh_" + std::to_string(count);
+    std::string meshName = "mesh_" + std::to_string(m_primitiveNumber);
     std::string primitiveName = "????";
     if (primitiveType == D3DPT_TRIANGLELIST
         || primitiveType == D3DPT_TRIANGLESTRIP
@@ -195,6 +198,47 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     file << " <asset>\n";
     file << "  <unit meter='0.01' name='centimeter'/>\n";
     file << " </asset>\n";
+
+    file << " <library_images>\n";
+    for (size_t i = 0; i < m_textures.size(); ++i)
+    {
+        if (m_textures[i].empty())
+        {
+            continue;
+        }
+
+        file << "  <image id='texutre" << i << "'>\n";
+        file << "   <init_from>" << m_textures[i] << "</init_from>\n";
+        file << "  </image>\n";
+    }
+    file << " </library_images>\n";
+
+    file << " <library_materials>\n";
+    file << "  <material id='" << meshName << "-material'>\n";
+    file << "   <instance_effect url='#" << meshName << "-material-fx'/>\n";
+    file << "  </material>\n";
+    file << " </library_materials>\n";
+
+    file << " <library_effects>\n";
+    file << "  <effect id='" << meshName << "-material-fx'>\n";
+    file << "   <profile_COMMON>\n";
+    for (size_t i = 0; i < m_textures.size(); ++i)
+    {
+        if (m_textures[i].empty())
+        {
+            continue;
+        }
+
+        file << "    <newparam sid='texture" << i << "-surface'>\n";
+        file << "     <surface type='2D'>\n";
+        file << "      <init_from>texture" << i << "</init_from>\n";
+        file << "     </surface>\n";
+        file << "    </newparam>\n";
+    }
+    file << "   </profile_COMMON>\n";
+    file << "  </effect>\n";
+    file << " </library_effects>\n";
+
     file << " <library_geometries>\n";
     file << "  <geometry id='" << meshName << "' name='" << meshName << "'>\n";
     file << "   <mesh>\n";
@@ -247,7 +291,7 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     }
 
 
-    file << "    <" << primitiveName << " count='" << primitiveCount << "'>\n";
+    file << "    <" << primitiveName << " material='" << meshName << "-material' count='" << primitiveCount << "'>\n";
 
     if (it_find != vertexDataMap.end())
     {
@@ -312,7 +356,9 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
     file << " </scene>\n";
     file << "</COLLADA>\n";
 
-    count += 1;
+    m_textures.clear();
+
+    m_primitiveNumber += 1;
 }
 
 void ColladaExporter::EndScene()
