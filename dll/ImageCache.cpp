@@ -28,8 +28,9 @@ std::string ImageCache::Add(size_t width, size_t height, D3DFORMAT format, void*
         return it->second;
     }
 
-    std::string filename = m_path + "\\" + hash + ".dds";
-    if (SaveDDS(filename, width, height, format, pData, pitch))
+    std::string filename = hash + ".dds";
+    std::string fullpath = m_path + "\\" + filename;
+    if (SaveDDS(fullpath, width, height, format, pData, pitch))
     {
         m_cache.insert(std::make_pair(hash, filename));
     }
