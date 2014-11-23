@@ -6,5 +6,7 @@ add_library(common
             DDS.cpp
             DDS.h
             Platform.h
+			XmlNode.cpp
+			XmlNode.h
             md5c.c
             md5.h)

@@ -1,5 +1,6 @@
 #include "ColladaExporter.h"
 
+#include "common/XmlNode.h"
 #include "D3DHelpers.h"
 
 #include <cassert>
@@ -34,14 +35,16 @@ struct VertexComponentData
 typedef std::map<std::string, std::vector<VertexComponentData>> VertexDataMap;
 
 template <typename T>
-size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& file, D3DPRIMITIVETYPE primitiveType)
+size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::string& output, D3DPRIMITIVETYPE primitiveType)
 {
     size_t trianglesWritten = 0;
+    output.reserve(numIndicies * 2);
     if (primitiveType == D3DPT_TRIANGLELIST)
     {
         for (size_t i = 0; i < numIndicies; ++i)
         {
-            file << indexData[i] << ' ';
+            output.append(std::to_string(indexData[i]));
+            output.append(1, ' ');
         }
         trianglesWritten = numIndicies / 3;
     }
@@ -59,7 +62,12 @@ size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& fil
                 // degenerate triangle
                 continue;
             }
-            file << idx1 << ' ' << idx2 << ' ' << idx3 << ' ';
+            output.append(std::to_string(idx1));
+            output.append(1, ' ');
+            output.append(std::to_string(idx2));
+            output.append(1, ' ');
+            output.append(std::to_string(idx3));
+            output.append(1, ' ');
             ++trianglesWritten;
         }
     }
@@ -68,9 +76,12 @@ size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& fil
         // 1 2 0  3 4 0  5 6 0  7 8 0 ...
         for (size_t i = 1; i < (numIndicies - 1) / 2; i += 2)
         {
-            file << indexData[i] << ' ';
-            file << indexData[i + 1] << ' ';
-            file << indexData[0];
+            output.append(std::to_string(indexData[i]));
+            output.append(1, ' ');
+            output.append(std::to_string(indexData[i + 1]));
+            output.append(1, ' ');
+            output.append(std::to_string(indexData[0]));
+            output.append(1, ' ');
             ++trianglesWritten;
         }
     }
@@ -81,31 +92,35 @@ size_t WriteIndicies_(const T* indexData, size_t numIndicies, std::ofstream& fil
     return trianglesWritten;
 }
 
-void WriteComponent_(std::ofstream& file, const uint8_t* data, size_t numVertices, const std::string& meshName, const std::string& componentName, size_t componentSize, size_t stride)
+void AddComponent_(XmlNode& node, const uint8_t* data, size_t numVertices, const std::string& meshName, const std::string& componentName, size_t componentSize, size_t stride)
 {
-    file << "    <source id='" << meshName << "-" << componentName << "'>\n";
-
     const float* componentData = reinterpret_cast<const float*>(data);
-    file << "     <float_array id='" << meshName << "-" << componentName << "-array' count='" << numVertices * componentSize << "'>";
+    std::string componentDataValue;
+    componentDataValue.reserve(numVertices * componentSize * 2);
     for (size_t i = 0; i < numVertices; ++i)
     {
         for (size_t j = 0; j < componentSize; ++j)
         {
-            file << componentData[j] << ' ';
+            componentDataValue.append(std::to_string(componentData[j]));
+            componentDataValue.append(1, ' ');
         }
-        file << ' ';
+        componentDataValue.append(1, ' ');
         componentData = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(componentData) + stride);
     }
-    file << "</float_array>\n";
-    file << "     <technique_common>\n";
-    file << "      <accessor source = '#" << meshName << "-" << componentName << "-array' count='" << numVertices << "' stride='" << componentSize << "'>\n";
+    XmlNode& sourceNode = node.AddChild("source").AddParameter("id", meshName + "-" + componentName);
+    sourceNode.AddChild("float_array")
+        .AddParameter("id", meshName + "-" + componentName + "-array")
+        .AddParameter("count", std::to_string(numVertices * componentSize))
+        .SetValue(std::move(componentDataValue));
+    XmlNode& accessorNode = sourceNode.AddChild("technique_common")
+                                        .AddChild("accessor").AddParameter("source", "#" + meshName + "-" + componentName + "-array")
+                                                            .AddParameter("count", std::to_string(numVertices))
+                                                            .AddParameter("stride", std::to_string(componentSize));
+
     for (size_t i = 0; i < componentSize; ++i)
     {
-        file << "       <param name='" << char('X' + i) << "' type='float'/>\n";
+        accessorNode.AddChild("param").AddParameter("name", std::string(1, char('X' + i))).AddParameter("type", "float");
     }
-    file << "      </accessor>\n";
-    file << "     </technique_common>\n";
-    file << "    </source>\n";
 }
 
 size_t GetComponentSize_(BYTE usage, BYTE type, size_t defaultSize)
@@ -193,13 +208,12 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
         return;
     }
 
-    file << "<?xml version='1.0' encoding='utf-8'?>\n";
-    file << "<COLLADA xmlns='http://www.collada.org/2005/11/COLLADASchema' version='1.4.1'>\n";
-    file << " <asset>\n";
-    file << "  <unit meter='0.01' name='centimeter'/>\n";
-    file << " </asset>\n";
-
-    file << " <library_images>\n";
+    XmlNode colladaRoot("COLLADA");
+    colladaRoot.AddParameter("xmlns", "http://www.collada.org/2005/11/COLLADASchema")
+               .AddParameter("version", "1.4.1");
+    colladaRoot.AddChild("asset")
+               .AddChild("unit").AddParameter("meter", "0.01").AddParameter("name", "centimeter");
+    XmlNode& libraryImagesRoot = colladaRoot.AddChild("library_images");
     for (size_t i = 0; i < m_textures.size(); ++i)
     {
         if (m_textures[i].empty())
@@ -207,41 +221,46 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
             continue;
         }
 
-        file << "  <image id='texutre" << i << "'>\n";
-        file << "   <init_from>" << m_textures[i] << "</init_from>\n";
-        file << "  </image>\n";
+        libraryImagesRoot.AddChild("image").AddParameter("id", "texture" + i)
+            .AddChild("init_from").SetValue(m_textures[i]);
     }
-    file << " </library_images>\n";
+    XmlNode& libraryMaterialsRoot = colladaRoot.AddChild("library_materials");
+    libraryMaterialsRoot.AddChild("material").AddParameter("id", meshName + "-material")
+        .AddChild("instance_effect").AddParameter("url", "#" + meshName + "-material-fx");
 
-    file << " <library_materials>\n";
-    file << "  <material id='" << meshName << "-material'>\n";
-    file << "   <instance_effect url='#" << meshName << "-material-fx'/>\n";
-    file << "  </material>\n";
-    file << " </library_materials>\n";
+    XmlNode& libraryEffects = colladaRoot.AddChild("library_effects");
+    XmlNode& profileCommon = libraryEffects.AddChild("effect").AddParameter("id", meshName + "-material-fx")
+                                           .AddChild("profile_COMMON");
 
-    file << " <library_effects>\n";
-    file << "  <effect id='" << meshName << "-material-fx'>\n";
-    file << "   <profile_COMMON>\n";
-    for (size_t i = 0; i < m_textures.size(); ++i)
-    {
-        if (m_textures[i].empty())
-        {
-            continue;
-        }
+    profileCommon.AddChild("newparam").AddParameter("sid", "texture0-surface")
+                .AddChild("surface").AddParameter("type", "2D")
+                .AddChild("init_from").SetValue("texture0");
+    profileCommon.AddChild("newparam").AddParameter("sid", "sampler2D_0")
+        .AddChild("sampler2D")
+        .AddChild("source").SetValue("texture0-surface");
+    XmlNode& phong = profileCommon.AddChild("phong");
+    phong.AddChild("emission")
+        .AddChild("color").AddParameter("sid", "emission").SetValue("0.0 0.0 0.0 1.0");
+    phong.AddChild("ambient")
+        .AddChild("color").AddParameter("sid", "ambient").SetValue("0.5 0.5 0.5 1.0");
+    phong.AddChild("diffuse")
+        .AddChild("texture").AddParameter("texture", "sampler2D_0").AddParameter("texcoord", "CHANNEL0");
+    phong.AddChild("specular")
+        .AddChild("color").AddParameter("sid", "specular").SetValue("0.0 0.0 0.0 1.0");
+    phong.AddChild("shininess")
+        .AddChild("float").AddParameter("sid", "shininess").SetValue("2.0");
+    phong.AddChild("reflective")
+        .AddChild("color").AddParameter("sid", "reflective").SetValue("0.0 0.0 0.0 1.0");
+    phong.AddChild("reflectivity")
+        .AddChild("float").AddParameter("sid", "reflectivity").SetValue("1.0");
+    phong.AddChild("transparent").AddParameter("opaque", "RGB_ZERO")
+        .AddChild("color").AddParameter("sid", "transparent").SetValue("1.0 1.0 1.0 1.0");
+    phong.AddChild("transparency")
+        .AddChild("float").AddParameter("sid", "transparency").SetValue("0.0");
 
-        file << "    <newparam sid='texture" << i << "-surface'>\n";
-        file << "     <surface type='2D'>\n";
-        file << "      <init_from>texture" << i << "</init_from>\n";
-        file << "     </surface>\n";
-        file << "    </newparam>\n";
-    }
-    file << "   </profile_COMMON>\n";
-    file << "  </effect>\n";
-    file << " </library_effects>\n";
-
-    file << " <library_geometries>\n";
-    file << "  <geometry id='" << meshName << "' name='" << meshName << "'>\n";
-    file << "   <mesh>\n";
+    XmlNode& libraryGeometriesRoot = colladaRoot.AddChild("library_geometries");
+    XmlNode& meshNode = libraryGeometriesRoot.AddChild("geometry").AddParameter("id", meshName).AddParameter("name", meshName)
+                        .AddChild("mesh");
 
     VertexDataMap vertexDataMap;
 
@@ -277,25 +296,27 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
         for (size_t i = 0; i < components.second.size(); ++i)
         {
             VertexComponentData& vertexData = components.second[i];
-            WriteComponent_(file, vertexData.data_, numVertices, meshName, components.first + std::to_string(i), vertexData.size_, stride);
+            AddComponent_(meshNode, vertexData.data_, numVertices, meshName, components.first + std::to_string(i), vertexData.size_, stride);
         }
     }
-
 
     auto it_find = vertexDataMap.find("POSITION");
     if (it_find != vertexDataMap.end())
     {
-        file << "    <vertices id='" << meshName << "-VERTEX'>\n";
-        file << "     <input semantic='POSITION' source='#" << meshName << "-POSITION0'/>\n";
-        file << "    </vertices>\n";
+        meshNode.AddChild("vertices").AddParameter("id", meshName + "-VERTEX")
+            .AddChild("input").AddParameter("semantic", "POSITION").AddParameter("source", "#" + meshName + "-POSITION0");
     }
 
-
-    file << "    <" << primitiveName << " material='" << meshName << "-material' count='" << primitiveCount << "'>\n";
+    XmlNode& primitiveNode = meshNode.AddChild(primitiveName)
+                                    .AddParameter("material", meshName + "-material")
+                                    .AddParameter("count", std::to_string(primitiveCount));
 
     if (it_find != vertexDataMap.end())
     {
-        file << "     <input semantic='VERTEX' source='#" << meshName << "-VERTEX' offset = '0'/>\n";
+        primitiveNode.AddChild("input")
+            .AddParameter("semantic", "VERTEX")
+            .AddParameter("source", "#" + meshName + "-VERTEX")
+            .AddParameter("offset", "0");
     }
 
     for (auto& components : vertexDataMap)
@@ -308,53 +329,45 @@ void ColladaExporter::AddPrimitive(D3DPRIMITIVETYPE primitiveType,
         for (size_t i = 0; i < components.second.size(); ++i)
         {
             VertexComponentData& vertexData = components.second[i];
-            file << "     <input semantic='" << components.first << "' source='#" << meshName << "-" << components.first + std::to_string(i) << "' offset = '0'/>\n";
+            primitiveNode.AddChild("input")
+                .AddParameter("semantic", components.first)
+                .AddParameter("source", "#" + meshName + "-" + components.first + std::to_string(i))
+                .AddParameter("offset", "0");
         }
     }
 
-    file << "     <p>";
+    XmlNode& indiciesNode = primitiveNode.AddChild("p");
     size_t trianglesWritten = 0;
+    std::string indiciesValue;
     if (indexFormat == D3DFMT_INDEX16)
     {
         const uint16_t* indexData = reinterpret_cast<const uint16_t*>(indicies);
-        trianglesWritten = WriteIndicies_(indexData, numIndicies, file, primitiveType);
+        trianglesWritten = WriteIndicies_(indexData, numIndicies, indiciesValue, primitiveType);
+        indiciesNode.SetValue(indiciesValue);
     }
     else if (indexFormat == D3DFMT_INDEX32)
     {
         const uint32_t* indexData = reinterpret_cast<const uint32_t*>(indicies);
-        trianglesWritten = WriteIndicies_(indexData, numIndicies, file, primitiveType);
+        trianglesWritten = WriteIndicies_(indexData, numIndicies, indiciesValue, primitiveType);
     }
     else
     {
         LOG("Unsupported index format %d", indexFormat);
     }
+    indiciesNode.SetValue(std::move(indiciesValue));
 
-    file << "</p>\n";
+    XmlNode& libraryVisualScenesRoot = colladaRoot.AddChild("library_visual_scenes");
+    libraryVisualScenesRoot.AddChild("visual_scene").AddParameter("id", "VisualSceneNode").AddParameter("name", meshName)
+        .AddChild("node").AddParameter("id", meshName + "-node").AddParameter("name", meshName).AddParameter("type", "NODE")
+        .AddChild("instance_geometry").AddParameter("url", "#" + meshName)
+        .AddChild("bind_material")
+        .AddChild("techinque_common")
+        .AddChild("instance_material").AddParameter("symbol", meshName + "-material").AddParameter("target", "#" + meshName + "-material");
+    colladaRoot.AddChild("scene")
+        .AddChild("instance_visual_scene").AddParameter("url", "#VisualSceneNode");
 
-    //file << "     <vcount>";
-    //for (size_t i = 0; i < trianglesWritten; ++i)
-    //{
-    //    file << "3 ";
-    //}
-    //file << "</vcount>\n";
-
-    file << "    </" << primitiveName << ">\n";
-
-
-    file << "   </mesh>\n";
-    file << "  </geometry>\n";
-    file << " </library_geometries>\n";
-    file << " <library_visual_scenes>\n";
-    file << "  <visual_scene id='VisualSceneNode' name='" << meshName << "'>\n";
-    file << "   <node id='" << meshName << "-node' name='" << meshName << "' type='NODE'>\n";
-    file << "    <instance_geometry url='#" << meshName << "'/>\n";
-    file << "   </node>\n";
-    file << "  </visual_scene>\n";
-    file << " </library_visual_scenes>\n";
-    file << " <scene>\n";
-    file << "  <instance_visual_scene url='#VisualSceneNode'/>\n";
-    file << " </scene>\n";
-    file << "</COLLADA>\n";
+    file << "<?xml version = \"1.0\" encoding = \"utf-8\"?>" << std::endl;
+    colladaRoot.Serialize(0, file);
 
     m_textures.clear();
 

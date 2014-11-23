@@ -22,15 +22,16 @@ std::string ImageCache::Add(size_t width, size_t height, D3DFORMAT format, void*
     GetSurfaceSize(width, height, format, &imageSize, nullptr, nullptr);
 
     std::string hash = ComputeHash_(static_cast<const uint8_t*>(pData), imageSize);
-    auto it = m_cache.find(hash);
-    if (it != m_cache.end())
-    {
-        return it->second;
-    }
+    //auto it = m_cache.find(hash);
+    //if (it != m_cache.end())
+    //{
+    //    return it->second;
+    //}
 
     std::string filename = hash + ".dds";
     std::string fullpath = m_path + "\\" + filename;
-    if (SaveDDS(fullpath, width, height, format, pData, pitch))
+    const bool flipY = true;
+    if (SaveDDS(fullpath, width, height, format, pData, pitch, flipY))
     {
         m_cache.insert(std::make_pair(hash, filename));
     }
