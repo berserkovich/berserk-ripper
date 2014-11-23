@@ -3,6 +3,7 @@
 #include "common/Common.h"
 
 #include <algorithm>
+#include <vector>
 
 #pragma pack(push, 1)
 
@@ -56,7 +57,7 @@ struct DDS_PIXELFORMAT
 
 #define DDS_FLAGS_VOLUME 0x00200000 // DDSCAPS2_VOLUME
 
-typedef struct
+struct DDS_HEADER
 {
     uint32_t          size;
     uint32_t          flags;
@@ -72,16 +73,23 @@ typedef struct
     uint32_t          caps3;
     uint32_t          caps4;
     uint32_t          reserved2;
-} DDS_HEADER;
+};
 
-typedef struct
+struct DDS_HEADER_DXT10
 {
     DXGI_FORMAT   dxgiFormat;
     uint32_t      resourceDimension;
     uint32_t      miscFlag; // see D3D11_RESOURCE_MISC_FLAG
     uint32_t      arraySize;
     uint32_t      reserved;
-} DDS_HEADER_DXT10;
+};
+
+struct DDS_FILE
+{
+    uint32_t        magic;
+    DDS_HEADER      header;
+    unsigned char   data[1];
+};
 
 #pragma pack(pop)
 
@@ -370,28 +378,101 @@ void GetSurfaceSize(size_t width, size_t height, D3DFORMAT format, size_t* outNu
     }
 }
 
-bool SaveDDS(const std::string& name, size_t width, size_t height, D3DFORMAT format, void* pData, int pitch)
+void FixDXTFlip(DDS_FILE* ddsFile)
 {
-    DDS_HEADER header = {};
-    header.size = sizeof(header);
-    header.flags = DDS_HEADER_FLAGS_TEXTURE;
-    header.height = static_cast<DWORD>(height);
-    header.width = static_cast<DWORD>(width);
-    header.ddspf.size = sizeof(DDS_PIXELFORMAT);
-    header.caps = DDS_SURFACE_FLAGS_TEXTURE;
+    size_t numBlocks = ddsFile->header.width * ddsFile->header.height / 16;
+    if (ddsFile->header.ddspf.fourCC == D3DFMT_DXT1)
+    {
+        for (size_t i = 0; i < numBlocks; ++i)
+        {
+            unsigned char* colorBlock = ddsFile->data + i * 8;
+            std::swap(colorBlock[4], colorBlock[7]);
+            std::swap(colorBlock[5], colorBlock[6]);
+        }
+    }
+    else if (ddsFile->header.ddspf.fourCC == D3DFMT_DXT2
+        || ddsFile->header.ddspf.fourCC == D3DFMT_DXT3)
+    {
+        for (size_t i = 0; i < numBlocks; ++i)
+        {
+            uint16_t* alphaBlock = reinterpret_cast<uint16_t*>(ddsFile->data + i * 16);
+            unsigned char* colorBlock = ddsFile->data + i * 16 + 8;
+            std::swap(alphaBlock[0], alphaBlock[3]);
+            std::swap(alphaBlock[1], alphaBlock[2]);
+            std::swap(colorBlock[4], colorBlock[7]);
+            std::swap(colorBlock[5], colorBlock[6]);
+        }
+    }
+    else if (ddsFile->header.ddspf.fourCC == D3DFMT_DXT4
+        || ddsFile->header.ddspf.fourCC == D3DFMT_DXT5)
+    {
+        for (size_t i = 0; i < numBlocks; ++i)
+        {
+            uint64_t* alphaBlock = reinterpret_cast<uint64_t*>(ddsFile->data + i * 16);
+            uint64_t tmp = (*alphaBlock & 0x000000000000FFFF);
+            tmp |= (*alphaBlock & 0x000000000FFF0000) << 36;
+            tmp |= (*alphaBlock & 0x000000FFF0000000) << 12;
+            tmp |= (*alphaBlock & 0x000FFF0000000000) >> 12;
+            tmp |= (*alphaBlock & 0xFFF0000000000000) >> 36;
+            *alphaBlock = tmp;
+
+            unsigned char* colorBlock = ddsFile->data + i * 16 + 8;
+            std::swap(colorBlock[4], colorBlock[7]);
+            std::swap(colorBlock[5], colorBlock[6]);
+        }
+    }
+}
+
+bool SaveDDS(const std::string& name, size_t width, size_t height, D3DFORMAT format, void* pData, int pitch, bool flipY)
+{
+    size_t numBytes = 0;
+    size_t rowBytes = 0;
+    size_t numRows = 0;
+    GetSurfaceSize(width, height, format, &numBytes, &rowBytes, &numRows);
+
+    size_t ddsFileSize = sizeof(DDS_FILE) - 1 + numBytes;
+    std::unique_ptr<unsigned char[]> ddsFileMemoryPtr = std::unique_ptr<unsigned char[]>(new unsigned char[ddsFileSize]);
+    DDS_FILE* ddsFile = reinterpret_cast<DDS_FILE*>(ddsFileMemoryPtr.get());
+
+    ddsFile->magic = DDS_MAGIC;
+    ddsFile->header.size = sizeof(ddsFile->header);
+    ddsFile->header.flags = DDS_HEADER_FLAGS_TEXTURE;
+    ddsFile->header.height = static_cast<DWORD>(height);
+    ddsFile->header.width = static_cast<DWORD>(width);
+    ddsFile->header.ddspf.size = sizeof(DDS_PIXELFORMAT);
+    ddsFile->header.caps = DDS_SURFACE_FLAGS_TEXTURE;
     if (IsFourCC(format))
     {
-        header.ddspf.flags = DDS_FOURCC;
-        header.ddspf.fourCC = format;
+        ddsFile->header.ddspf.flags = DDS_FOURCC;
+        ddsFile->header.ddspf.fourCC = format;
     }
     else
     {
-        header.ddspf.flags = GetColorMask(format, &header.ddspf.RGBBitCount, &header.ddspf.RBitMask, &header.ddspf.GBitMask, &header.ddspf.BBitMask, &header.ddspf.ABitMask);
-        if (!header.ddspf.flags)
+        ddsFile->header.ddspf.flags = GetColorMask(format, &ddsFile->header.ddspf.RGBBitCount, &ddsFile->header.ddspf.RBitMask, &ddsFile->header.ddspf.GBitMask, &ddsFile->header.ddspf.BBitMask, &ddsFile->header.ddspf.ABitMask);
+        if (!ddsFile->header.ddspf.flags)
         {
             LOG("Unsupported format %d", format);
             return false;
         }
+    }
+
+    uint8_t* row = static_cast<uint8_t*>(pData);
+    int srcPitch = pitch;
+    if (flipY)
+    {
+        row += (numRows - 1) * pitch;
+        srcPitch = -pitch;
+    }
+
+    for (size_t i = 0; i < numRows; ++i)
+    {
+        memcpy(ddsFile->data + i * rowBytes, row, rowBytes);
+        row += srcPitch;
+    }
+
+    if (flipY && format >= D3DFMT_DXT1 && format <= D3DFMT_DXT5)
+    {
+        FixDXTFlip(ddsFile);
     }
 
     std::wstring wideName = Utf8ToWideChar(name);
@@ -403,33 +484,10 @@ bool SaveDDS(const std::string& name, size_t width, size_t height, D3DFORMAT for
     }
 
     DWORD bytesWritten = 0;
-    if (!WriteFile(filePtr.get(), &DDS_MAGIC, sizeof(DDS_MAGIC), &bytesWritten, NULL))
+    if (!WriteFile(filePtr.get(), ddsFile, ddsFileSize, &bytesWritten, NULL))
     {
         LOG("Write operation failed (%d, %s)", GetLastError(), name.c_str());
         return false;
-    }
-
-    bytesWritten = 0;
-    if (!WriteFile(filePtr.get(), &header, sizeof(header), &bytesWritten, NULL))
-    {
-        LOG("Write operation failed (%d, %s)", GetLastError(), name.c_str());
-        return false;
-    }
-
-    size_t numBytes = 0;
-    size_t rowBytes = 0;
-    size_t numRows = 0;
-    GetSurfaceSize(width, height, format, &numBytes, &rowBytes, &numRows);
-    uint8_t* row = static_cast<uint8_t*>(pData);
-    for (size_t i = 0; i < numRows; ++i)
-    {
-        bytesWritten = 0;
-        if (!WriteFile(filePtr.get(), row, rowBytes, &bytesWritten, NULL))
-        {
-            LOG("Write operation failed (%d, %d, %dx%d(%d), %d, %s)", GetLastError(), i, width, height, numRows, format, name.c_str());
-            return false;
-        }
-        row += pitch;
     }
 
     return true;
